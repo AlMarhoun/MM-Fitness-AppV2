@@ -9,7 +9,6 @@ export const LOCAL_KEYS = [
   "mm-padel-logs",
   "mm-plan",
   "mm-active-workout",
-  "mm-session-ui",
   "mm-auth-mode"
 ];
 

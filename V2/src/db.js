@@ -19,7 +19,7 @@ export async function upsertDefaultProfile(user) {
       id: user.id,
       email,
       display_name: displayName,
-      role: "athlete",
+      role: "player",
       is_active: true
     }, { onConflict: "id" })
     .select("*")
@@ -98,3 +98,4 @@ export async function insertBackupExport(userId, athleteId, metadata = {}) {
   if (error) throw error;
   return data;
 }
+

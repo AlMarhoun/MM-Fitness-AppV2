@@ -1,9 +1,5 @@
-import { authState, initAuth, isAdmin, signIn, signOut } from "./auth.js";
-import { dayHistory, monthCalendar } from "./history.js";
-import { createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js";
-import { ROLE_DEFINITIONS, ROLES, canOpenAdminPanel, roleLabel } from "./roles.js";
+import { authState, initAuth, isAdmin, signIn, signOut, signUp } from "./auth.js";
 import { downloadLocalBackup, getSyncStatus, importLocalBackupFile, loadCloudSnapshot, localRead, localRemove, localWrite, queueCloudSnapshot, recordBackupExport, saveCloudSnapshot } from "./storage.js";
-import { clearSessionUi, persistWorkoutUiState, readSessionUi, shouldResumeActiveWorkout } from "./sessionPersistence.js";
 
 const PLAN = {
   title: "MM Hybrid: Fat Loss + Padel Performance + Athletic Physique",
@@ -114,34 +110,26 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 const $ = (sel) => document.querySelector(sel);
 const app = $("#app");
 const forceSplash = new URLSearchParams(location.search).has("splash");
-const initialActiveWorkout = read("mm-active-workout", null);
-const initialSessionUi = readSessionUi({});
-const resumeActiveWorkout = shouldResumeActiveWorkout(initialSessionUi, initialActiveWorkout);
 
 const state = {
-  screen: resumeActiveWorkout ? "active" : (initialSessionUi.screen || "home"),
-  selectedDay: Number.isInteger(initialSessionUi.selectedDay) ? initialSessionUi.selectedDay : null,
+  screen: "home",
+  selectedDay: null,
   theme: read("mm-theme", "dark"),
   logs: read("mm-daily-logs", {}),
   workoutLogs: read("mm-workout-logs", {}),
   nutritionLogs: read("mm-nutrition-logs", {}),
   padelLogs: read("mm-padel-logs", {}),
   plan: read("mm-plan", PLAN),
-  activeWorkout: initialActiveWorkout,
-  activeCursor: initialSessionUi.activeCursor || null,
-  lastWorkoutSummary: null,
-  historySelectedDate: initialSessionUi.historySelectedDate || todayStr(),
-  adminPanelOpen: false,
+  activeWorkout: read("mm-active-workout", null),
   auth: { ...authState },
   syncStatus: getSyncStatus(),
   editingPlan: false,
   toast: "",
   modal: null,
-  splashDone: resumeActiveWorkout || (!forceSplash && sessionStorage.getItem("mm-splash-done") === "1")
+  splashDone: !forceSplash && sessionStorage.getItem("mm-splash-done") === "1"
 };
 
 let timerTick = null;
-let pendingScrollY = resumeActiveWorkout ? Number(initialSessionUi.scrollY || 0) : null;
 
 function read(key, fallback) {
   return localRead(key, fallback);
@@ -161,8 +149,7 @@ function appSnapshot() {
       "mm-nutrition-logs": state.nutritionLogs,
       "mm-padel-logs": state.padelLogs,
       "mm-plan": state.plan,
-      "mm-active-workout": state.activeWorkout,
-      "mm-session-ui": readSessionUi({})
+      "mm-active-workout": state.activeWorkout
     }
   };
 }
@@ -175,7 +162,7 @@ function hydrateFromSnapshot(snapshot) {
   state.nutritionLogs = data["mm-nutrition-logs"] || state.nutritionLogs;
   state.padelLogs = data["mm-padel-logs"] || state.padelLogs;
   state.plan = data["mm-plan"] || state.plan;
-  if (!state.activeWorkout) state.activeWorkout = data["mm-active-workout"] || state.activeWorkout;
+  state.activeWorkout = data["mm-active-workout"] || state.activeWorkout;
   write("mm-theme", state.theme);
   write("mm-daily-logs", state.logs);
   write("mm-workout-logs", state.workoutLogs);
@@ -184,7 +171,6 @@ function hydrateFromSnapshot(snapshot) {
   write("mm-plan", state.plan);
   if (state.activeWorkout) write("mm-active-workout", state.activeWorkout);
   else localRemove("mm-active-workout");
-  if (state.activeWorkout) persistWorkoutUiState(state);
   return true;
 }
 function saveAll() {
@@ -196,7 +182,6 @@ function saveAll() {
   write("mm-plan", state.plan);
   if (state.activeWorkout) write("mm-active-workout", state.activeWorkout);
   else localRemove("mm-active-workout");
-  if (state.activeWorkout) persistWorkoutUiState(state);
   queueCloudSnapshot(appSnapshot);
 }
 function todayStr() {
@@ -248,7 +233,6 @@ function setScreen(screen) {
   state.screen = screen;
   state.selectedDay = screen === "plan" ? null : state.selectedDay;
   state.editingPlan = false;
-  if (state.activeWorkout) persistWorkoutUiState(state);
   render();
 }
 function toast(msg) {
@@ -262,7 +246,6 @@ function toast(msg) {
   }, 1800);
 }
 function pct(n, d) { return d ? Math.min(100, Math.round((n / d) * 100)) : 0; }
-function kg(value) { return Number.isFinite(value) ? `${value.toLocaleString("en-US", { maximumFractionDigits: 1 })} kg` : "Not enough data"; }
 function esc(value = "") {
   return String(value).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]));
 }
@@ -292,13 +275,9 @@ function icon(name) {
 }
 
 function render() {
-  const restoreActiveScroll = state.screen === "active" && state.activeWorkout;
-  const scrollBeforeRender = restoreActiveScroll ? window.scrollY || 0 : null;
   app.dataset.theme = state.theme;
   app.innerHTML = `${!state.splashDone ? Splash() : ""}<main class="app-main">${route()}</main>${BottomNav()}${Modal()}${state.toast ? `<div class="toast">${state.toast}</div>` : ""}`;
   bind();
-  if (restoreActiveScroll && pendingScrollY === null) pendingScrollY = scrollBeforeRender;
-  restoreScrollAfterRender();
 }
 function Splash() {
   setTimeout(() => {
@@ -317,9 +296,9 @@ function Splash() {
   </section>`;
 }
 function route() {
-  if (state.screen === "active" && state.activeWorkout) return ActiveWorkout();
   if (state.auth.loading) return BootScreen();
   if (!state.auth.user) return LoginScreen();
+  if (state.screen === "active") return ActiveWorkout();
   if (state.screen === "plan") return state.selectedDay === null ? Plan() : WorkoutDetail();
   if (state.screen === "logs") return Logs();
   if (state.screen === "nutrition") return Nutrition();
@@ -335,20 +314,23 @@ function BootScreen() {
   </section>`;
 }
 function LoginScreen() {
+  const mode = read("mm-auth-mode", "signin");
   return `<section class="auth-screen">
     ${brandGlyph("auth-signature")}
     <div class="eyebrow">Private athlete OS</div>
-    <h1 class="h1">Sign In</h1>
-    <p class="command-copy">Access is controlled by the owner. Use an invited MM Fitness App account.</p>
+    <h1 class="h1">${mode === "signup" ? "Create Player Access" : "Sign In"}</h1>
+    <p class="command-copy">${mode === "signup" ? "Create a player account. Admin role is never self-assigned." : "Use your MM Fitness App account to sync securely."}</p>
     ${state.auth.error ? `<div class="paused-banner" style="text-align:left">${esc(state.auth.error)}</div>` : ""}
     <section class="form-card section-gap">
       <div class="field"><label>Email</label><input class="input" type="email" autocomplete="email" data-auth="email" placeholder="name@example.com" /></div>
-      <div class="field"><label>Password</label><input class="input" type="password" autocomplete="current-password" data-auth="password" placeholder="Password" /></div>
-      <button class="btn btn-primary section-gap" style="width:100%" data-action="auth-signin">Sign In</button>
+      <div class="field"><label>Password</label><input class="input" type="password" autocomplete="${mode === "signup" ? "new-password" : "current-password"}" data-auth="password" placeholder="Password" /></div>
+      ${mode === "signup" ? `<div class="field"><label>Display Name</label><input class="input" data-auth="displayName" placeholder="Mohammad" /></div>` : ""}
+      <button class="btn btn-primary section-gap" style="width:100%" data-action="${mode === "signup" ? "auth-signup" : "auth-signin"}">${mode === "signup" ? "Create Account" : "Sign In"}</button>
+      <button class="btn btn-ghost section-gap" style="width:100%" data-action="toggle-auth-mode">${mode === "signup" ? "I already have an account" : "Create player account"}</button>
     </section>
     <section class="card metric-card section-gap">
-      <div class="eyebrow">Controlled Access</div>
-      <div class="metric-sub">New users must be invited or created by the owner/admin through a secure backend flow. Public account creation is disabled in this app.</div>
+      <div class="eyebrow">Security</div>
+      <div class="metric-sub">Cloud data is protected by Supabase Auth and RLS. Local backup remains on this device until you export or migrate it.</div>
     </section>
   </section>`;
 }
@@ -566,7 +548,6 @@ function startWorkout(dayIndex) {
     return;
   }
   state.activeWorkout = {
-    id: `workout-${Date.now()}`,
     dayIndex,
     startedAt: Date.now(),
     elapsedBeforePause: 0,
@@ -574,10 +555,8 @@ function startWorkout(dayIndex) {
     paused: false,
     sets: {}
   };
-  state.screen = "active";
-  state.activeCursor = { exerciseIndex: 0, setIndex: 0 };
-  pendingScrollY = 0;
   saveAll();
+  state.screen = "active";
   render();
 }
 function ActiveWorkout() {
@@ -604,7 +583,6 @@ function ActiveWorkout() {
     </div>`;
 }
 function ActiveExercise(ex, exIdx) {
-  const performance = summarizeCurrentExercise(ex.name, exIdx, state.activeWorkout, state.workoutLogs, state.plan);
   const allDone = Array.from({ length: Number(ex.sets) }, (_, i) => state.activeWorkout.sets[`${exIdx}-${i}`]?.done).every(Boolean);
   return `<article class="exercise-card" style="${allDone ? "border-color:color-mix(in srgb,var(--success) 32%,transparent)" : ""}">
     <div style="display:flex;justify-content:space-between;gap:10px">
@@ -614,28 +592,8 @@ function ActiveExercise(ex, exIdx) {
       </div>
     </div>
     ${ex.notes ? `<div class="day-meta">${ex.notes}</div>` : ""}
-    ${ExercisePerformanceCard(performance)}
     ${Array.from({ length: Number(ex.sets) }, (_, setIdx) => SetRow(exIdx, setIdx)).join("")}
   </article>`;
-}
-function ExercisePerformanceCard(performance) {
-  const best = performance.previousBest;
-  const last = performance.last;
-  const currentPrs = performance.prs.filter((pr) => pr.type !== "first_record");
-  if (!best && !last) {
-    return `<div class="performance-strip empty">Not enough history yet. Complete this exercise once to unlock best and last-session context.</div>`;
-  }
-  return `<div class="performance-strip">
-    <div>
-      <span class="perf-label">Last</span>
-      <strong>${last ? `${kg(last.bestWeight)} × ${last.bestReps || "-"} · ${last.completedSets || 0} sets · Vol ${kg(last.totalVolume)}` : "Not enough data"}</strong>
-    </div>
-    <div>
-      <span class="perf-label">Best</span>
-      <strong>${best ? `${kg(best.bestWeight)} × ${best.bestReps || "-"} · 1RM ${kg(best.bestEstimatedOneRepMax)} · Vol ${kg(best.totalVolume)}` : "Not enough data"}</strong>
-    </div>
-    ${currentPrs.length ? `<span class="pr-badge">New PR</span>` : ""}
-  </div>`;
 }
 function SetRow(exIdx, setIdx) {
   const key = `${exIdx}-${setIdx}`;
@@ -674,8 +632,7 @@ function resumeWorkout() {
 }
 function Logs() {
   const log = state.logs[todayStr()] || {};
-  return `${Header("Logs", "Daily review")}
-    ${HistoryCalendar()}
+  return `${Header("Daily Log", fmtDate())}
     <section class="form-card">
       <div class="card-title">Body Metrics</div>
       ${Field("Weight (kg)", "bodyWeight", log.bodyWeight || "", "number", "e.g. 99.1")}
@@ -693,84 +650,6 @@ function Logs() {
       ${Adherence("dietAdherence", log.dietAdherence)}
       <div class="field"><label>Notes</label><textarea data-log="notes" placeholder="How did today go?">${log.notes || ""}</textarea></div>
     </section>`;
-}
-function HistoryCalendar() {
-  const history = dayHistory(state.historySelectedDate, {
-    workoutLogs: state.workoutLogs,
-    dailyLogs: state.logs,
-    nutritionLogs: state.nutritionLogs,
-    padelLogs: state.padelLogs,
-    plan: state.plan
-  });
-  const cells = monthCalendar(state.historySelectedDate, {
-    workoutLogs: state.workoutLogs,
-    nutritionLogs: state.nutritionLogs,
-    padelLogs: state.padelLogs,
-    plan: state.plan
-  });
-  return `<section class="card weekly-card section-gap history-panel">
-    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
-      <div>
-        <div class="card-title">History / Calendar</div>
-        <div class="day-meta">${fmtDate(state.historySelectedDate)}</div>
-      </div>
-      <button class="mini-btn" data-action="history-today">Today</button>
-    </div>
-    <div class="calendar-grid section-gap">
-      ${["S","M","T","W","T","F","S"].map((day) => `<div class="calendar-weekday">${day}</div>`).join("")}
-      ${cells.map((cell) => CalendarCell(cell)).join("")}
-    </div>
-    ${HistoryDaySummary(history)}
-  </section>`;
-}
-function CalendarCell(cell) {
-  const s = cell.status;
-  const classes = [
-    "calendar-day",
-    cell.inMonth ? "" : "muted",
-    cell.isToday ? "today" : "",
-    cell.isSelected ? "selected" : "",
-    s.workoutCompleted ? "workout" : "",
-    s.padelCompleted || s.padelScheduled ? "padel" : "",
-    s.nutritionAdhered ? "nutrition" : "",
-    s.missed ? "missed" : ""
-  ].filter(Boolean).join(" ");
-  return `<button class="${classes}" data-history-date="${cell.date}">
-    <span>${cell.dayNumber}</span>
-    <i></i>
-  </button>`;
-}
-function HistoryDaySummary(history) {
-  const summary = history.workoutSummary;
-  const log = history.dailyLog || {};
-  const nutrition = history.nutrition || {};
-  const padel = history.padel || {};
-  return `<div class="history-summary">
-    <div class="summary-line"><span>Workout</span><strong>${summary ? esc(summary.workoutName) : history.status.missed ? "Missed / not logged" : "No workout logged"}</strong></div>
-    ${summary ? `
-      <div class="summary-line"><span>Duration</span><strong>${summary.duration} min</strong></div>
-      <div class="summary-line"><span>Completed Sets</span><strong>${summary.completedSets}</strong></div>
-      <div class="summary-line"><span>Total Volume</span><strong>${kg(summary.totalVolume)}</strong></div>
-      <div class="perf-label">Best estimated 1RM</div>
-      ${summary.bestOneRepMaxHighlights.length ? summary.bestOneRepMaxHighlights.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${kg(item.bestEstimatedOneRepMax)}</strong></div>`).join("") : `<div class="empty small">Not enough weighted data.</div>`}
-      <div class="perf-label">Exercises</div>
-      ${summary.exercises.length ? summary.exercises.map((exercise) => HistoryExercise(exercise)).join("") : `<div class="empty small">No completed weighted sets.</div>`}
-      <div class="perf-label">PRs</div>
-      ${history.prs.length ? history.prs.map((pr) => `<span class="chip success">${esc(pr.exerciseName)} · ${esc(pr.label)}</span>`).join("") : `<div class="empty small">No PRs detected.</div>`}
-    ` : ""}
-    <div class="summary-divider"></div>
-    <div class="summary-line"><span>Nutrition</span><strong>${nutrition.adhered ? esc(nutrition.adhered) : "No nutrition log"}</strong></div>
-    <div class="summary-line"><span>Padel</span><strong>${padel.completed ? `${padel.duration || 0} min completed` : "No padel completed"}</strong></div>
-    <div class="summary-line"><span>Body</span><strong>${log.bodyWeight ? `${log.bodyWeight} kg` : "No body metrics"}</strong></div>
-    ${log.notes ? `<div class="day-meta history-note">${esc(log.notes)}</div>` : ""}
-  </div>`;
-}
-function HistoryExercise(exercise) {
-  const sets = exercise.loggedSets || [];
-  return `<article class="history-exercise">
-    <div class="summary-line"><span>${esc(exercise.exerciseName)}</span><strong>${kg(exercise.totalVolume)}</strong></div>
-    ${sets.length ? sets.map((set) => `<div class="day-meta">S${(set.setIndex ?? 0) + 1}: ${set.done ? `${set.weight || "-"} kg × ${set.reps || "-"} reps` : "not completed"}</div>`).join("") : `<div class="day-meta">${exercise.completedSets} completed sets</div>`}
-  </article>`;
 }
 function Field(label, field, value, type, ph) {
   return `<div class="field"><label>${label}</label><input class="input" data-log="${field}" type="${type}" step="0.1" placeholder="${ph}" value="${value}" /></div>`;
@@ -811,8 +690,6 @@ function NutritionField(label, field, value) {
 }
 function Progress() {
   const ws = weekStats();
-  const performance = summarizeProgress(state.workoutLogs, state.plan);
-  const canAdmin = canOpenAdminPanel(state.auth.profile);
   const weight = latestWeight();
   const totalWorkouts = Object.values(state.workoutLogs).filter((w) => w.completed).length;
   const totalPadel = Object.values(state.padelLogs).filter((p) => p.completed).length;
@@ -834,25 +711,10 @@ function Progress() {
       <div class="card-title">Weight Trend</div>
       ${weights.length > 1 ? `<div class="progress-chart">${weights.map(([, v]) => `<div class="bar" style="--h:${Math.max(18, 150 - (v.bodyWeight - 88) * 5)}px"></div>`).join("")}</div>` : `<div class="empty">Log two weight entries to reveal the trend.</div>`}
     </section>
-    <section class="card weekly-card section-gap">
-      <div class="card-title">Strength Progress</div>
-      <div class="metric-sub">Total logged volume: ${kg(performance.totalVolume)}</div>
-      ${performance.volumeTrend.length ? `<div class="progress-chart compact">${performance.volumeTrend.map((item) => `<div class="bar" title="${esc(item.workoutName)}" style="--h:${Math.max(18, Math.min(150, (item.totalVolume || 0) / 35))}px"></div>`).join("")}</div>` : `<div class="empty">Finish a weighted workout to reveal volume trend.</div>`}
-    </section>
-    <section class="card weekly-card section-gap">
-      <div class="card-title">Best Estimated 1RM</div>
-      ${performance.bestByExercise.length ? performance.bestByExercise.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${kg(item.bestEstimatedOneRepMax)}</strong></div>`).join("") : `<div class="empty">No completed weighted sets yet.</div>`}
-    </section>
-    <section class="card weekly-card section-gap">
-      <div class="card-title">Recent PRs</div>
-      ${performance.prList.length ? performance.prList.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${esc(item.label)}</strong></div>`).join("") : `<div class="empty">PRs will appear after you beat a previous best.</div>`}
-    </section>
     <section class="form-card section-gap">
       <div class="card-title">Settings</div>
       <div class="segmented"><button class="${state.theme === "dark" ? "active" : ""}" data-theme-set="dark">Dark</button><button class="${state.theme === "light" ? "active" : ""}" data-theme-set="light">Light</button><button data-action="reset-demo">Reset Logs</button></div>
-      ${canAdmin ? `<button class="btn btn-secondary section-gap" style="width:100%" data-action="toggle-admin-panel">Admin Panel</button>` : ""}
     </section>
-    ${canAdmin && state.adminPanelOpen ? AdminPanel() : ""}
     <section class="form-card section-gap">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
         <div>
@@ -870,48 +732,9 @@ function Progress() {
         <label>Import Backup JSON</label>
         <input class="input" type="file" accept="application/json" data-import-backup />
       </div>
-      ${isAdmin() ? `<div class="section-gap card metric-card" style="box-shadow:none"><div class="eyebrow">Admin</div><div class="metric-sub">Admin role active. User management requires Supabase RLS plus Edge Function/backend for safe invites and role updates.</div></div>` : ""}
+      ${isAdmin() ? `<div class="section-gap card metric-card" style="box-shadow:none"><div class="eyebrow">Admin</div><div class="metric-sub">Admin role active. Player management requires assigned athlete policies; privileged account creation should stay outside the public frontend.</div></div>` : ""}
       <button class="btn btn-danger section-gap" style="width:100%" data-action="logout">Logout</button>
     </section>`;
-}
-function AdminPanel() {
-  const role = state.auth.profile?.role || ROLES.ATHLETE;
-  const currentEmail = state.auth.profile?.email || state.auth.user?.email || "Signed-in user";
-  return `<section class="form-card section-gap admin-panel">
-    <div class="card-title">Admin Panel</div>
-    <div class="paused-banner" style="text-align:left">Secure invite and role changes require a Supabase Edge Function or trusted backend. No service role key is used in this frontend.</div>
-    <div class="section-gap">
-      <div class="eyebrow">Current User List</div>
-      <div class="admin-user-row">
-        <div>
-          <strong>${esc(currentEmail)}</strong>
-          <div class="day-meta">${roleLabel(role)} · active</div>
-        </div>
-        <span class="chip">${esc(role)}</span>
-      </div>
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Add / Invite User</div>
-      <div class="field"><label>Email</label><input class="input" disabled placeholder="athlete@example.com" /></div>
-      <div class="field"><label>Role</label><select class="input" disabled>${Object.values(ROLES).map((item) => `<option>${item}</option>`).join("")}</select></div>
-      <button class="btn btn-secondary" style="width:100%" disabled>Invite via secure backend</button>
-      <div class="metric-sub section-gap">Production flow: owner/admin submits invite request to Edge Function; backend uses service role securely; RLS prevents self-promotion and cross-user access.</div>
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Role Rules</div>
-      ${Object.entries(ROLE_DEFINITIONS).map(([key, description]) => `<div class="summary-line"><span>${roleLabel(key)}</span><strong>${esc(description)}</strong></div>`).join("")}
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Available Actions Structure</div>
-      <div class="admin-action-grid">
-        <button class="mini-btn" disabled>Add user</button>
-        <button class="mini-btn" disabled>Invite user</button>
-        <button class="mini-btn" disabled>Change role</button>
-        <button class="mini-btn" disabled>Deactivate</button>
-        <button class="mini-btn" disabled>Assign athlete</button>
-      </div>
-    </div>
-  </section>`;
 }
 function BottomNav() {
   const items = [["home","Home","home"],["plan","Plan","plan"],["logs","Logs","logs"],["nutrition","Nutrition","nutrition"],["progress","Progress","progress"]];
@@ -929,7 +752,7 @@ function Modal() {
   return `<div class="modal-backdrop" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="card-title">${m.title}</div>
-      ${m.bodyHtml || `<p class="day-meta" style="margin:8px 0 0">${m.body}</p>`}
+      <p class="day-meta" style="margin:8px 0 0">${m.body}</p>
       <div class="modal-actions">
         <button class="btn btn-secondary" data-modal="${m.cancelAction}">${m.cancelLabel}</button>
         <button class="btn ${m.danger ? "btn-danger" : "btn-primary"}" data-modal="${m.confirmAction}">${m.confirmLabel}</button>
@@ -968,10 +791,6 @@ function bind() {
     else setScreen(el.dataset.quick);
   }));
   document.querySelectorAll("[data-action]").forEach((el) => el.addEventListener("click", () => handleAction(el.dataset.action)));
-  document.querySelectorAll("[data-history-date]").forEach((el) => el.addEventListener("click", () => {
-    state.historySelectedDate = el.dataset.historyDate;
-    render();
-  }));
   document.querySelectorAll("[data-import-backup]").forEach((el) => el.addEventListener("change", async () => {
     const file = el.files?.[0];
     if (!file) return;
@@ -1008,15 +827,11 @@ function bind() {
   }));
   document.querySelectorAll("[data-set]").forEach((el) => el.addEventListener("input", () => {
     const key = el.dataset.set;
-    const [exerciseIndex, setIndex] = key.split("-").map(Number);
-    state.activeCursor = { exerciseIndex, setIndex };
     state.activeWorkout.sets[key] = { ...(state.activeWorkout.sets[key] || {}), [el.dataset.field]: el.value };
     saveAll();
   }));
   document.querySelectorAll("[data-set-done]").forEach((el) => el.addEventListener("click", () => {
     const key = el.dataset.setDone;
-    const [exerciseIndex, setIndex] = key.split("-").map(Number);
-    state.activeCursor = { exerciseIndex, setIndex };
     const prev = state.activeWorkout.sets[key] || {};
     state.activeWorkout.sets[key] = { ...prev, done: !prev.done };
     saveAll(); render();
@@ -1083,21 +898,24 @@ async function handleAction(action) {
     saveAll();
     render();
   }
-  if (action === "auth-signin") {
+  if (action === "toggle-auth-mode") {
+    const next = read("mm-auth-mode", "signin") === "signin" ? "signup" : "signin";
+    write("mm-auth-mode", next);
+    state.auth.error = "";
+    render();
+  }
+  if (action === "auth-signin" || action === "auth-signup") {
     const email = document.querySelector("[data-auth='email']")?.value?.trim();
     const password = document.querySelector("[data-auth='password']")?.value || "";
+    const displayName = document.querySelector("[data-auth='displayName']")?.value?.trim() || "";
     try {
       state.auth.error = "";
-      await signIn(email, password);
+      if (action === "auth-signin") await signIn(email, password);
+      else await signUp(email, password, displayName);
     } catch (error) {
       state.auth.error = error.message || "Authentication failed";
       render();
     }
-  }
-  if (action === "toggle-admin-panel") {
-    if (!canOpenAdminPanel(state.auth.profile)) return toast("Admin access required");
-    state.adminPanelOpen = !state.adminPanelOpen;
-    render();
   }
   if (action === "logout") {
     await signOut();
@@ -1134,7 +952,6 @@ async function handleAction(action) {
   if (action === "go-nutrition") setScreen("nutrition");
   if (action === "go-logs") setScreen("logs");
   if (action === "go-progress") setScreen("progress");
-  if (action === "history-today") { state.historySelectedDate = todayStr(); render(); }
   if (action === "toggle-padel") togglePadel();
   if (action === "pause-workout") pauseWorkout();
   if (action === "resume-workout") resumeWorkout();
@@ -1161,15 +978,12 @@ function togglePadel() {
 function handleModal(action) {
   if (action === "close") {
     state.modal = null;
-    state.lastWorkoutSummary = null;
     render();
   }
   if (action === "confirm-cancel") {
     state.activeWorkout = null;
-    state.activeCursor = null;
     state.modal = null;
     saveAll();
-    clearSessionUi();
     state.screen = "home";
     toast("Workout canceled");
     render();
@@ -1177,56 +991,20 @@ function handleModal(action) {
   if (action === "confirm-finish") {
     const today = todayStr();
     const aw = state.activeWorkout;
-    const savedSession = {
-      ...createWorkoutSessionSnapshot(aw, state.plan, elapsed(aw)),
-      date: today,
-    };
-    const summary = summarizeWorkoutSession(savedSession, state.plan);
-    const prs = [];
-    for (const exercise of summary.exercises) {
-      const performance = summarizeCurrentExercise(exercise.exerciseName, exercise.exerciseIndex, aw, state.workoutLogs, state.plan);
-      prs.push(...performance.prs.filter((pr) => pr.type !== "first_record").map((pr) => ({ ...pr, exerciseName: exercise.exerciseName })));
-    }
     state.workoutLogs[today] = {
-      ...savedSession,
-      totalVolume: summary.totalVolume,
-      completedSets: summary.completedSets
+      completed: true,
+      date: today,
+      dayIndex: aw.dayIndex,
+      duration: Math.max(1, Math.round(elapsed(aw) / 60)),
+      sets: aw.sets
     };
     state.activeWorkout = null;
-    state.activeCursor = null;
-    state.lastWorkoutSummary = summary;
-    state.modal = {
-      title: "Workout saved",
-      bodyHtml: WorkoutSummaryHtml(summary, prs),
-      cancelLabel: "Close",
-      confirmLabel: "View Progress",
-      cancelAction: "close",
-      confirmAction: "summary-progress"
-    };
-    saveAll();
-    clearSessionUi();
-    state.screen = "home";
-    render();
-  }
-  if (action === "summary-progress") {
     state.modal = null;
-    state.lastWorkoutSummary = null;
-    state.screen = "progress";
+    saveAll();
+    state.screen = "home";
+    toast("Workout saved");
     render();
   }
-}
-function WorkoutSummaryHtml(summary, prs = []) {
-  return `<div class="summary-box">
-    <div class="summary-line"><span>Total Volume</span><strong>${kg(summary.totalVolume)}</strong></div>
-    <div class="summary-line"><span>Completed Sets</span><strong>${summary.completedSets}</strong></div>
-    <div class="summary-line"><span>Duration</span><strong>${summary.duration} min</strong></div>
-    <div class="summary-divider"></div>
-    <div class="perf-label">Best estimated 1RM</div>
-    ${summary.bestOneRepMaxHighlights.length ? summary.bestOneRepMaxHighlights.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${kg(item.bestEstimatedOneRepMax)}</strong></div>`).join("") : `<div class="empty">No weighted completed sets.</div>`}
-    <div class="summary-divider"></div>
-    <div class="perf-label">PRs achieved</div>
-    ${prs.length ? prs.slice(0, 5).map((pr) => `<span class="chip success">${esc(pr.exerciseName)} · ${esc(pr.label)}</span>`).join("") : `<div class="empty">No new PRs this session.</div>`}
-  </div>`;
 }
 function manageTimer() {
   if (timerTick) clearInterval(timerTick);
@@ -1238,52 +1016,7 @@ function manageTimer() {
   }
 }
 
-function restoreScrollAfterRender() {
-  if (pendingScrollY === null || state.screen !== "active" || !state.activeWorkout) return;
-  const y = pendingScrollY;
-  pendingScrollY = null;
-  requestAnimationFrame(() => window.scrollTo({ top: y, behavior: "auto" }));
-}
-
-function persistActiveWorkoutNow() {
-  if (!state.activeWorkout) return;
-  write("mm-active-workout", state.activeWorkout);
-  persistWorkoutUiState(state);
-}
-
-function installResumeGuards() {
-  const persist = () => persistActiveWorkoutNow();
-  window.addEventListener("pagehide", persist, { capture: true });
-  window.addEventListener("beforeunload", persist, { capture: true });
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") persist();
-    if (document.visibilityState === "visible") {
-      const ui = readSessionUi({});
-      if (shouldResumeActiveWorkout(ui, state.activeWorkout)) {
-        state.screen = "active";
-        state.selectedDay = Number.isInteger(ui.selectedDay) ? ui.selectedDay : state.selectedDay;
-        state.activeCursor = ui.activeCursor || state.activeCursor;
-        pendingScrollY = Number(ui.scrollY || window.scrollY || 0);
-        render();
-      }
-    }
-  });
-  window.addEventListener("pageshow", (event) => {
-    const ui = readSessionUi({});
-    if (!shouldResumeActiveWorkout(ui, state.activeWorkout)) return;
-    state.screen = "active";
-    state.selectedDay = Number.isInteger(ui.selectedDay) ? ui.selectedDay : state.selectedDay;
-    state.activeCursor = ui.activeCursor || state.activeCursor;
-    pendingScrollY = Number(ui.scrollY || 0);
-    if (event.persisted || state.auth.loading) render();
-  });
-  window.addEventListener("scroll", () => {
-    if (state.screen === "active" && state.activeWorkout) persistWorkoutUiState(state);
-  }, { passive: true });
-}
-
 async function boot() {
-  installResumeGuards();
   window.addEventListener("mm-sync-status", (event) => {
     state.syncStatus = event.detail;
     const badges = document.querySelectorAll(".sync-badge");
@@ -1298,13 +1031,9 @@ async function boot() {
     state.auth = nextAuth;
     if (nextAuth.user && nextAuth.athlete && !nextAuth.loading) {
       try {
-        if (state.activeWorkout && state.screen === "active") {
-          queueCloudSnapshot(appSnapshot);
-        } else {
-          const cloud = await loadCloudSnapshot();
-          if (cloud?.data) hydrateFromSnapshot(cloud);
-          else queueCloudSnapshot(appSnapshot);
-        }
+        const cloud = await loadCloudSnapshot();
+        if (cloud?.data) hydrateFromSnapshot(cloud);
+        else queueCloudSnapshot(appSnapshot);
       } catch (error) {
         state.syncStatus = getSyncStatus();
         state.auth.error = error.message || "Could not load cloud data";

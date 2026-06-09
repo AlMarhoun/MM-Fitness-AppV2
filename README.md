@@ -1,72 +1,53 @@
-# MM Fitness App Build V1
+# MM Fitness App V2
 
-Premium mobile-first PWA build for **MM Fitness App**, designed for Add to Home Screen daily use.
+Premium mobile-first PWA for MM Fitness App alpha.
 
-## How To Run
+## Deployment
 
-From this folder:
+This repo is ready to deploy as a new Vercel project.
+
+Recommended Vercel settings:
+
+- Framework Preset: `Other`
+- Build Command: leave empty
+- Output Directory: leave empty / project root
+- Install Command: leave empty
+
+The app is a static PWA using:
+
+- `index.html`
+- `manifest.json`
+- `sw.js`
+- `src/`
+- `assets/`
+- `vercel.json`
+
+## Local Checks
 
 ```bash
-python3 -m http.server 4199 --bind 127.0.0.1
+npm run check
+npm run validate:manifest
 ```
 
-Then open:
+## Supabase
 
-```text
-http://127.0.0.1:4199/index.html
-```
+The frontend includes only public-safe Supabase values:
 
-The app is static and has no external runtime dependencies.
+- Supabase project URL
+- Supabase publishable key
 
-## Supabase Upgrade
+Never commit:
 
-This folder is now the complete working project. It includes:
+- Postgres connection string
+- database password
+- service role key
+- admin password
+- private access tokens
 
-- `src/supabase.js` - Supabase public client config.
-- `src/auth.js` - login, signup, logout, session/profile loading.
-- `src/db.js` - Supabase data helpers.
-- `src/storage.js` - local backup, import/export, and cloud snapshot sync.
-- `supabase/migrations/` - database schema and RLS policies.
-- `docs/` - setup, security, migration, PWA, and QA documentation.
-- `File Notes/` - project memory and operating notes.
+Cloud login/sync requires the Supabase schema and RLS migrations from the original build package to be applied before production testing.
 
-To activate the cloud version, apply the migrations in `supabase/migrations/` to the Supabase project, then create/sign in users through Supabase Auth.
+## PWA Notes
 
-Frontend-safe values only are stored in the app: Supabase URL and publishable key. Do not place database passwords or service role keys in this project.
-
-## Main Files
-
-- `index.html` - PWA-ready app shell and mobile meta tags.
-- `src/app.js` - app logic, navigation, storage, workout flow.
-- `src/styles.css` - V2 design system and responsive mobile styling.
-- `manifest.json` - Add to Home Screen metadata.
-- `sw.js` - basic offline cache service worker.
-- `assets/brand/mm-logo-signature-reference.png` - approved Image Gen logo from the input folder, cleaned for transparent in-app use.
-- `assets/brand/mm-logo-splash-reference.png` - splash-scale version of the approved input logo.
-- `assets/brand/mm-logo-nav-reference.png` - compact navigation version of the approved input logo.
-- `assets/icons/` - PWA icons.
-- `screenshots/` - QA screenshots from mobile viewport checks.
-- `REFERENCE_MATCH_REPORT.md` - comparison against the attached visual references.
-
-## Built Sections
-
-- Home
-- Plan
-- Workout Detail
-- Editable Workouts
-- Active Workout
-- Logs
-- Nutrition
-- Progress
-- Settings controls inside Progress
-
-## Design Direction
-
-V2 uses the approved **Performance Signature OS** direction from Image Gen 2 exploration:
-
-- Midnight Navy foundation.
-- Ice Blue action/accent.
-- Silver Mist typography.
-- Teal padel/performance signal.
-- Floating app-like bottom navigation.
-- Premium command-card home dashboard.
+- Cache version: `mm-fitness-app-v11-upload-ready`
+- Open with `?splash=1&v=11` after deployment to force the latest visual pass.
+- If iPhone keeps an old icon/app, remove the old home-screen app and add it again after opening the new Vercel URL.

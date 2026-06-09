@@ -1,6 +1,5 @@
 import { supabase } from "./supabase.js";
 import { getOrCreateAthlete, getProfile, upsertDefaultProfile } from "./db.js";
-import { canOpenAdminPanel } from "./roles.js";
 
 export const authState = {
   loading: true,
@@ -53,6 +52,17 @@ export async function signIn(email, password) {
   if (error) throw error;
 }
 
+export async function signUp(email, password, displayName = "") {
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { display_name: displayName }
+    }
+  });
+  if (error) throw error;
+}
+
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
@@ -67,5 +77,6 @@ export function currentUserId() {
 }
 
 export function isAdmin() {
-  return canOpenAdminPanel(authState.profile);
+  return authState.profile?.role === "admin";
 }
+
