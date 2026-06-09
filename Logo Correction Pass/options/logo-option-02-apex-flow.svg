@@ -1,0 +1,17 @@
+<svg width="512" height="320" viewBox="0 0 512 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Apex Flow</title>
+  <defs>
+    <linearGradient id="g2" x1="55" y1="229" x2="452" y2="77" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5ECFFF" stop-opacity="0"/>
+      <stop offset=".26" stop-color="#8DE3FF"/>
+      <stop offset=".48" stop-color="#FFFFFF"/>
+      <stop offset=".78" stop-color="#F3FAFF"/>
+      <stop offset="1" stop-color="#6CD7FF"/>
+    </linearGradient>
+  </defs>
+  <path d="M56 226C84 166 128 120 180 96C216 80 253 79 249 105C247 124 218 143 190 170C174 185 162 202 157 215C194 183 244 153 277 155C300 157 305 176 284 202C275 213 264 224 256 236" stroke="url(#g2)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M132 183C166 138 198 111 222 111C237 111 230 128 204 152" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" opacity=".96"/>
+  <path d="M270 230L420 62" stroke="#F6FBFF" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M303 154C351 124 400 104 456 96" stroke="#D7F3FF" stroke-width="3.75" stroke-linecap="round"/>
+  <circle cx="447" cy="96" r="8.5" fill="#54E0C4"/>
+</svg>

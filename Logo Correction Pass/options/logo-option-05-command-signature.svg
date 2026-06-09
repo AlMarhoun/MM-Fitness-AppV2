@@ -1,0 +1,17 @@
+<svg width="512" height="320" viewBox="0 0 512 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Command Signature</title>
+  <defs>
+    <linearGradient id="g5" x1="48" y1="226" x2="462" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#78D8FF" stop-opacity=".08"/>
+      <stop offset=".25" stop-color="#79D9FF"/>
+      <stop offset=".5" stop-color="#FFFFFF"/>
+      <stop offset=".78" stop-color="#EEF8FF"/>
+      <stop offset="1" stop-color="#67D8FF"/>
+    </linearGradient>
+  </defs>
+  <path d="M51 225C85 157 148 104 204 90C230 84 246 90 243 105C239 126 197 157 169 197C209 169 252 150 281 156C307 162 291 198 257 235" stroke="url(#g5)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M100 198C142 139 188 105 219 104" stroke="#EAF8FF" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M257 235L432 51" stroke="#FFFFFF" stroke-width="5.25" stroke-linecap="round"/>
+  <path d="M316 153C360 127 403 106 459 94" stroke="#F9FDFF" stroke-width="3.75" stroke-linecap="round"/>
+  <circle cx="455" cy="95" r="10" fill="#54E0C4"/>
+</svg>

@@ -1,0 +1,17 @@
+<svg width="512" height="320" viewBox="0 0 512 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Silver Velocity Mark</title>
+  <defs>
+    <linearGradient id="g6" x1="56" y1="221" x2="450" y2="94" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67D5FF" stop-opacity=".1"/>
+      <stop offset=".22" stop-color="#8FE3FF"/>
+      <stop offset=".45" stop-color="#FFFFFF"/>
+      <stop offset=".73" stop-color="#F4FAFF"/>
+      <stop offset="1" stop-color="#B4ECFF"/>
+    </linearGradient>
+  </defs>
+  <path d="M58 223C91 156 152 101 210 88C241 81 251 93 236 116C219 142 188 169 165 205C209 174 249 154 277 158C298 161 294 183 262 224" stroke="url(#g6)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M121 191C153 143 190 112 222 105" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+  <path d="M262 224L430 55" stroke="#F8FCFF" stroke-width="4.75" stroke-linecap="round"/>
+  <path d="M315 151C361 124 405 104 455 96" stroke="#BFEFFF" stroke-width="5" stroke-linecap="round" opacity=".9"/>
+  <circle cx="443" cy="98" r="8.5" fill="#54E0C4"/>
+</svg>
