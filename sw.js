@@ -1,14 +1,15 @@
-const CACHE_NAME = "mm-fitness-app-v12-cloud-db";
+const CACHE_NAME = "mm-fitness-app-v15-network-first-src";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./src/styles.css?v=12",
-  "./src/app.js?v=12",
+  "./src/styles.css?v=15",
+  "./src/app.js?v=15",
   "./src/history.js",
   "./src/performance.js",
   "./src/roles.js",
   "./src/permissions.js",
+  "./src/adminData.js",
   "./src/sync.js",
   "./src/supabase.js",
   "./src/auth.js",
@@ -48,6 +49,18 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== location.origin) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+  if (url.pathname.includes("/src/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
     return;
   }
   event.respondWith(

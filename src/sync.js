@@ -237,6 +237,10 @@ async function upsertPlan(athleteId, userId, plan) {
   return planId;
 }
 
+export async function savePlanToCloud(athleteId, userId, plan) {
+  return upsertPlan(athleteId, userId, plan);
+}
+
 async function upsertWorkoutSession(athleteId, userId, date, session, planId) {
   if (!session?.completed) return;
   const clientSessionId = session.id || `${athleteId}-${date}`;

@@ -1,10 +1,13 @@
 import { authState, initAuth, isAdmin, signIn, signOut } from "./auth.js";
+import { loadAdminAthleteSnapshot, loadAdminDirectory, summarizeAthleteSnapshot } from "./adminData.js";
 import { dayHistory, monthCalendar } from "./history.js";
 import { createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js";
-import { ROLE_DEFINITIONS, ROLES, canOpenAdminPanel, roleLabel } from "./roles.js";
+import { ROLE_DEFINITIONS, ROLES, canOpenAdminPanel, isOwnerEmail, roleLabel } from "./roles.js";
 import { PERMISSIONS } from "./permissions.js";
+import { supabase } from "./supabase.js";
 import { downloadLocalBackup, getSyncStatus, importLocalBackupFile, loadCloudSnapshot, localRead, localRemove, localWrite, queueCloudSnapshot, recordBackupExport, saveCloudSnapshot } from "./storage.js";
 import { clearSessionUi, persistWorkoutUiState, readSessionUi, shouldResumeActiveWorkout } from "./sessionPersistence.js";
+import { savePlanToCloud } from "./sync.js";
 
 const PLAN = {
   title: "MM Hybrid: Fat Loss + Padel Performance + Athletic Physique",
@@ -136,6 +139,15 @@ const state = {
   auth: { ...authState },
   syncStatus: getSyncStatus(),
   editingPlan: false,
+  adminCreateStatus: "",
+  adminLoadStatus: "",
+  adminUsers: [],
+  adminAthletes: [],
+  adminSelectedAthleteId: "",
+  adminPlayerSnapshot: null,
+  adminPlanDraft: null,
+  adminPlanDay: 0,
+  adminPlanStatus: "",
   toast: "",
   modal: null,
   splashDone: resumeActiveWorkout || (!forceSplash && sessionStorage.getItem("mm-splash-done") === "1")
@@ -199,6 +211,61 @@ function saveAll() {
   else localRemove("mm-active-workout");
   if (state.activeWorkout) persistWorkoutUiState(state);
   queueCloudSnapshot(appSnapshot);
+}
+async function loadAdminCommandCenter(preferredAthleteId = state.adminSelectedAthleteId || currentAthleteId()) {
+  if (!canOpenAdminPanel(state.auth.profile)) return;
+  state.adminLoadStatus = "Loading player command center...";
+  render();
+  try {
+    const directory = await loadAdminDirectory(supabase);
+    state.adminUsers = directory.users;
+    state.adminAthletes = directory.athletes;
+    state.adminSelectedAthleteId = preferredAthleteId || directory.athletes[0]?.id || "";
+    if (state.adminSelectedAthleteId) {
+      await loadAdminPlayer(state.adminSelectedAthleteId, false);
+    }
+    state.adminLoadStatus = directory.athletes.length ? "Player command center loaded." : "No athlete profiles found yet.";
+  } catch (error) {
+    state.adminLoadStatus = error.message || "Could not load player command center.";
+  }
+  render();
+}
+async function loadAdminPlayer(athleteId, rerender = true) {
+  if (!athleteId) return;
+  state.adminSelectedAthleteId = athleteId;
+  state.adminPlanStatus = "Loading player data...";
+  if (rerender) render();
+  const fallback = appSnapshot();
+  const snapshot = await loadAdminAthleteSnapshot(athleteId, fallback);
+  state.adminPlayerSnapshot = snapshot;
+  state.adminPlanDraft = clone(snapshot?.data?.["mm-plan"] || state.plan);
+  state.adminPlanDay = 0;
+  state.adminPlanStatus = "Player data loaded.";
+  if (rerender) render();
+}
+async function saveAdminPlayerPlan() {
+  const athlete = selectedAdminAthlete();
+  if (!athlete || !state.adminPlanDraft) {
+    state.adminPlanStatus = "Select a player before saving.";
+    render();
+    return;
+  }
+  state.adminPlanStatus = "Saving player plan...";
+  render();
+  try {
+    await savePlanToCloud(athlete.id, currentUserId(), state.adminPlanDraft);
+    if (athlete.id === currentAthleteId()) {
+      state.plan = clone(state.adminPlanDraft);
+      saveAll();
+    }
+    const snapshot = await loadAdminAthleteSnapshot(athlete.id, appSnapshot());
+    state.adminPlayerSnapshot = snapshot;
+    state.adminPlanDraft = clone(snapshot?.data?.["mm-plan"] || state.adminPlanDraft);
+    state.adminPlanStatus = `Saved plan for ${athlete.display_name}.`;
+  } catch (error) {
+    state.adminPlanStatus = error.message || "Could not save player plan.";
+  }
+  render();
 }
 function todayStr() {
   const d = new Date();
@@ -266,6 +333,27 @@ function pct(n, d) { return d ? Math.min(100, Math.round((n / d) * 100)) : 0; }
 function kg(value) { return Number.isFinite(value) ? `${value.toLocaleString("en-US", { maximumFractionDigits: 1 })} kg` : "Not enough data"; }
 function esc(value = "") {
   return String(value).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]));
+}
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+function currentUserId() {
+  return state.auth.user?.id || null;
+}
+function currentAthleteId() {
+  return state.auth.athlete?.id || null;
+}
+function selectedAdminAthlete() {
+  const selectedId = state.adminSelectedAthleteId || currentAthleteId();
+  return state.adminAthletes.find((athlete) => athlete.id === selectedId) || state.adminAthletes[0] || null;
+}
+function selectedAdminUser() {
+  const athlete = selectedAdminAthlete();
+  const assignment = athlete?.users?.find((item) => item.relationship_type === "self") || athlete?.users?.[0];
+  return assignment?.user || null;
+}
+function planForAdminEditor() {
+  return state.adminPlanDraft || state.adminPlayerSnapshot?.data?.["mm-plan"] || state.plan;
 }
 function brandGlyph(cls = "brand-glyph") {
   const src = cls.includes("nav-signature")
@@ -876,60 +964,252 @@ function Progress() {
     </section>`;
 }
 function AdminPanel() {
-  const role = state.auth.profile?.role || ROLES.ATHLETE;
   const currentEmail = state.auth.profile?.email || state.auth.user?.email || "Signed-in user";
+  const role = isOwnerEmail(currentEmail) ? ROLES.OWNER : (state.auth.profile?.role || ROLES.ATHLETE);
   return `<section class="form-card section-gap admin-panel">
-    <div class="card-title">Admin Panel</div>
-    <div class="paused-banner" style="text-align:left">Cloud database storage is active after Supabase migrations are applied. User invitation, role changes, and permission writes require Supabase Edge Functions or a trusted backend. No service role key is used in this frontend.</div>
-    <div class="section-gap">
-      <div class="eyebrow">Users</div>
-      <div class="admin-user-row">
+    <div class="admin-hero">
+      <div>
+        <div class="eyebrow">Owner Command Center</div>
+        <div class="admin-title">Admin Panel</div>
+        <div class="metric-sub">Manage access, roles, permissions, and athlete assignments from one clean control surface.</div>
+      </div>
+      <span class="admin-status">Private</span>
+    </div>
+    <div class="admin-kpi-grid section-gap">
+      ${AdminKpi("Current role", roleLabel(role), "Owner controls enabled")}
+      ${AdminKpi("Users", state.adminUsers.length || "—", state.adminUsers.length ? "Loaded from database" : "Load directory")}
+      ${AdminKpi("Athletes", state.adminAthletes.length || "—", state.adminAthletes.length ? "Separate profiles" : "Load directory")}
+      ${AdminKpi("Security", "RLS", "Database policies applied")}
+    </div>
+    <div class="admin-current-user section-gap">
+      <div>
+        <div class="eyebrow">Signed In</div>
+        <strong>${esc(currentEmail)}</strong>
+        <div class="day-meta">${roleLabel(role)} · active · cloud account</div>
+      </div>
+      <span class="chip success">${esc(role)}</span>
+    </div>
+    ${AdminPlayerCommandCenter()}
+    ${AdminCreateUserForm()}
+    <div class="admin-section section-gap">
+      <div class="admin-section-head">
         <div>
-          <strong>${esc(currentEmail)}</strong>
-          <div class="day-meta">${roleLabel(role)} · active</div>
+          <div class="eyebrow">Primary Actions</div>
+          <div class="card-title">Straightforward Access Control</div>
         </div>
-        <span class="chip">${esc(role)}</span>
+        <span class="chip warning">More functions pending</span>
+      </div>
+      <div class="admin-action-grid premium">
+        ${AdminAction("Invite user", "Send a secure invite and choose initial role.", "invite-user")}
+        ${AdminAction("Change role", "Move a user between admin, athlete, and viewer.", "change-user-role")}
+        ${AdminAction("Grant permission", "Allow specific actions without changing role.", "update-user-permissions")}
+        ${AdminAction("Assign athlete", "Connect a user to Mohammad or future athlete profiles.", "assign-athlete")}
+        ${AdminAction("Deactivate", "Disable access without deleting historical data.", "deactivate-user")}
+        ${AdminAction("Audit logs", "Review sensitive admin activity.", "audit_logs.view")}
+      </div>
+      <div class="admin-note">Add User is live above through the create-user Edge Function. These remaining controls stay locked until their own Edge Functions are deployed.</div>
+    </div>
+    <div class="admin-section section-gap">
+      <div class="admin-section-head">
+        <div>
+          <div class="eyebrow">Roles</div>
+          <div class="card-title">Default Authority Levels</div>
+        </div>
+      </div>
+      <div class="role-stack">
+        ${Object.entries(ROLE_DEFINITIONS).map(([key, description]) => `<div class="role-row"><span>${roleLabel(key)}</span><strong>${esc(description)}</strong></div>`).join("")}
       </div>
     </div>
-    <div class="section-gap">
-      <div class="eyebrow">Invite User</div>
-      <div class="field"><label>Email</label><input class="input" disabled placeholder="athlete@example.com" /></div>
-      <div class="field"><label>Role</label><select class="input" disabled>${Object.values(ROLES).map((item) => `<option>${item}</option>`).join("")}</select></div>
-      <button class="btn btn-secondary" style="width:100%" disabled>Invite via secure backend</button>
-      <div class="metric-sub section-gap">Production flow: owner/admin submits invite request to Edge Function; backend uses service role securely; RLS prevents self-promotion and cross-user access.</div>
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Roles</div>
-      ${Object.entries(ROLE_DEFINITIONS).map(([key, description]) => `<div class="summary-line"><span>${roleLabel(key)}</span><strong>${esc(description)}</strong></div>`).join("")}
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Permissions</div>
-      ${Object.entries(PERMISSIONS).map(([category, keys]) => `<details class="permission-group"><summary>${esc(category.replaceAll("_", " "))}</summary>${keys.map((key) => `<span class="chip">${esc(key)}</span>`).join("")}</details>`).join("")}
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Athlete Assignments</div>
-      <div class="metric-sub">Assign users to athlete profiles through the pending assign-athlete Edge Function.</div>
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Settings</div>
-      <div class="metric-sub">Owner-level settings are stored in Supabase app_settings after migrations are applied.</div>
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Security / Audit Logs</div>
-      <div class="metric-sub">Sensitive admin actions must write to audit_logs from trusted Edge Functions.</div>
-    </div>
-    <div class="section-gap">
-      <div class="eyebrow">Available Actions Structure</div>
-      <div class="admin-action-grid">
-        <button class="mini-btn" disabled>Add user</button>
-        <button class="mini-btn" disabled>Invite user</button>
-        <button class="mini-btn" disabled>Grant permission</button>
-        <button class="mini-btn" disabled>Change role</button>
-        <button class="mini-btn" disabled>Deactivate</button>
-        <button class="mini-btn" disabled>Assign athlete</button>
+    <div class="admin-section section-gap">
+      <div class="admin-section-head">
+        <div>
+          <div class="eyebrow">Permissions Table</div>
+          <div class="card-title">Granular Controls</div>
+        </div>
       </div>
+      ${Object.entries(PERMISSIONS).map(([category, keys]) => `<details class="permission-group"><summary>${esc(category.replaceAll("_", " "))}<span>${keys.length}</span></summary><div class="permission-chip-grid">${keys.map((key) => `<span class="chip">${esc(key)}</span>`).join("")}</div></details>`).join("")}
+    </div>
+    <div class="admin-section section-gap">
+      <div class="admin-section-head">
+        <div>
+          <div class="eyebrow">Activation Checklist</div>
+          <div class="card-title">Production Unlock</div>
+        </div>
+      </div>
+      ${AdminChecklist("Supabase migrations applied", true)}
+      ${AdminChecklist("Public signup disabled", true)}
+      ${AdminChecklist("Owner role assigned", role === ROLES.OWNER)}
+      ${AdminChecklist("Create user Edge Function deployed", true)}
+      ${AdminChecklist("Player plan manager enabled", true)}
     </div>
   </section>`;
+}
+function AdminKpi(label, value, note) {
+  return `<div class="admin-kpi"><span>${label}</span><strong>${esc(value)}</strong><small>${esc(note)}</small></div>`;
+}
+function AdminPlayerCommandCenter() {
+  const athlete = selectedAdminAthlete();
+  const user = selectedAdminUser();
+  const summary = summarizeAthleteSnapshot(state.adminPlayerSnapshot || null);
+  const canShow = state.adminAthletes.length > 0;
+  return `<div class="admin-section section-gap player-command-center">
+    <div class="admin-section-head">
+      <div>
+        <div class="eyebrow">Player Command Center</div>
+        <div class="card-title">Activity + Personal Plan</div>
+      </div>
+      <button class="mini-btn" data-action="admin-refresh-directory">Refresh</button>
+    </div>
+    ${state.adminLoadStatus ? `<div class="admin-note">${esc(state.adminLoadStatus)}</div>` : `<div class="admin-note">Load the secure player directory to review each athlete and manage a separate plan.</div>`}
+    ${canShow ? `<div class="field section-gap">
+      <label>Select Player</label>
+      <select class="input" data-admin-athlete-select>
+        ${state.adminAthletes.map((item) => `<option value="${item.id}" ${item.id === athlete?.id ? "selected" : ""}>${esc(item.display_name)} · ${esc(item.status || "active")}</option>`).join("")}
+      </select>
+    </div>
+    <div class="player-profile-card">
+      <div>
+        <div class="eyebrow">Selected Athlete</div>
+        <strong>${esc(athlete?.display_name || "No athlete selected")}</strong>
+        <div class="day-meta">${user ? `${esc(user.email)} · ${roleLabel(user.role)}` : "No assigned user visible"}</div>
+      </div>
+      <span class="chip ${athlete?.id === currentAthleteId() ? "success" : ""}">${athlete?.id === currentAthleteId() ? "You" : "Player"}</span>
+    </div>
+    ${AdminPlayerActivity(summary)}
+    ${AdminPlayerPlanEditor()}` : `<div class="empty card section-gap">No player profiles loaded yet. Create a user with “New athlete profile” or refresh the directory.</div>`}
+  </div>`;
+}
+function AdminPlayerActivity(summary) {
+  const last = summary.lastWorkout;
+  return `<div class="admin-kpi-grid section-gap">
+    ${AdminKpi("Week Workouts", `${summary.workoutsThisWeek}/7`, "Completed this week")}
+    ${AdminKpi("Total Volume", kg(summary.totalVolume), "All completed sessions")}
+    ${AdminKpi("Nutrition", `${summary.nutritionThisWeek}/7`, "Adherent days")}
+    ${AdminKpi("Padel", `${summary.padelThisWeek}`, "Sessions this week")}
+    <div class="admin-wide-card">
+      <div class="eyebrow">Last Workout</div>
+      <strong>${last ? esc(last.workoutName || last.category || "Workout") : "No workout yet"}</strong>
+      <span>${last ? `${esc(last.date)} · ${Number(last.completedSets || 0)} sets · ${kg(Number(last.totalVolume || 0))}` : "When the player finishes a workout, it appears here."}</span>
+    </div>
+    <div class="admin-wide-card">
+      <div class="eyebrow">Latest Daily Log</div>
+      <strong>${summary.latestDaily ? esc(summary.latestDaily.date) : "No daily log yet"}</strong>
+      <span>${summary.latestDaily ? `Weight ${summary.latestDaily.bodyWeight || "—"} · Sleep ${summary.latestDaily.sleepScore || "—"}/5 · Energy ${summary.latestDaily.energyScore || "—"}/5` : "Daily readiness, body metrics, and notes appear here."}</span>
+    </div>
+  </div>`;
+}
+function AdminPlayerPlanEditor() {
+  const plan = planForAdminEditor();
+  const dayIdx = Math.min(Number(state.adminPlanDay || 0), Math.max(0, (plan?.days?.length || 1) - 1));
+  const day = plan?.days?.[dayIdx];
+  if (!plan || !day) return `<div class="empty card section-gap">No plan found for this player yet.</div>`;
+  return `<div class="admin-plan-editor section-gap">
+    <div class="admin-section-head">
+      <div>
+        <div class="eyebrow">Player Plan</div>
+        <div class="card-title">${esc(plan.title || "MM Fitness Plan")}</div>
+      </div>
+      <button class="btn btn-primary" style="min-height:38px;padding:0 14px" data-action="admin-save-player-plan">Save Plan</button>
+    </div>
+    <div class="admin-note">${esc(state.adminPlanStatus || "Changes here apply only to the selected player profile.")}</div>
+    <div class="admin-day-strip">
+      ${plan.days.map((item, i) => `<button class="${i === dayIdx ? "active" : ""}" data-admin-plan-day="${i}"><span>${esc(item.day.slice(0, 3))}</span><strong>${i + 1}</strong></button>`).join("")}
+    </div>
+    ${AdminPlanDayEditor(day, dayIdx)}
+  </div>`;
+}
+function AdminPlanDayEditor(day, dayIdx) {
+  return `<div class="form-card admin-plan-day">
+    <div class="grid-2">
+      ${AdminPlanField("Workout Name", dayIdx, "workoutName", workoutName(day))}
+      ${AdminPlanField("Category", dayIdx, "category", day.category || "")}
+      ${AdminPlanField("Duration", dayIdx, "duration", day.duration || 0, "number")}
+      ${AdminPlanField("Calories", dayIdx, "calories", day.calories || 0, "number")}
+    </div>
+    <div class="field"><label>Session Goal</label><textarea data-admin-plan-field="${dayIdx}" data-field="goal">${esc(day.goal || "")}</textarea></div>
+    <div class="field"><label>Nutrition Day Type</label>
+      <div class="segmented">${["HIGH","MED","LOW"].map((type) => `<button class="${day.nutritionType === type ? "active" : ""}" data-admin-nutrition="${dayIdx}" data-type="${type}">${type}</button>`).join("")}</div>
+    </div>
+    <div class="field"><label>Padel Schedule</label>
+      <div class="segmented"><button class="${day.hasPadel ? "active" : ""}" data-admin-padel="${dayIdx}" data-value="true">On</button><button class="${!day.hasPadel ? "active" : ""}" data-admin-padel="${dayIdx}" data-value="false">Off</button><button data-action="admin-add-exercise">Add Exercise</button></div>
+    </div>
+    ${day.hasPadel ? `<div class="grid-2">${AdminPlanField("Padel Time", dayIdx, "padelTime", day.padelTime || "")}${AdminPlanField("Padel Duration", dayIdx, "padelDuration", day.padelDuration || 90, "number")}</div>` : ""}
+    <div class="panel-list section-gap">
+      ${(day.exercises || []).map((ex, i) => AdminExerciseEditor(ex, i, dayIdx)).join("") || `<div class="empty card">No exercises yet.</div>`}
+    </div>
+    <button class="btn btn-secondary section-gap" style="width:100%" data-action="admin-add-exercise">Add Exercise</button>
+  </div>`;
+}
+function AdminPlanField(label, dayIdx, field, value, type = "text") {
+  return `<div class="field"><label>${label}</label><input class="input" data-admin-plan-field="${dayIdx}" data-field="${field}" type="${type}" value="${esc(value)}" /></div>`;
+}
+function AdminExerciseEditor(ex, i, dayIdx) {
+  return `<article class="exercise-card edit-exercise admin-exercise-card">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+      <div class="day-title">${i + 1}. ${esc(ex.name || "Exercise")}</div>
+      <div style="display:flex;gap:6px">
+        <button class="mini-btn" data-admin-move-ex="${i}" data-dir="-1">↑</button>
+        <button class="mini-btn" data-admin-move-ex="${i}" data-dir="1">↓</button>
+        <button class="mini-btn danger" data-admin-remove-ex="${i}">Remove</button>
+      </div>
+    </div>
+    <div class="field"><label>Name</label><input class="input" data-admin-edit-ex="${i}" data-field="name" value="${esc(ex.name || "")}" /></div>
+    <div class="edit-grid">
+      <div class="field"><label>Sets</label><input class="input" type="number" data-admin-edit-ex="${i}" data-field="sets" value="${esc(ex.sets || 0)}" /></div>
+      <div class="field"><label>Reps</label><input class="input" data-admin-edit-ex="${i}" data-field="reps" value="${esc(ex.reps || "")}" /></div>
+      <div class="field"><label>Weight Target</label><input class="input" data-admin-edit-ex="${i}" data-field="weightTarget" value="${esc(ex.weightTarget || "")}" /></div>
+      <div class="field"><label>Rest</label><input class="input" type="number" data-admin-edit-ex="${i}" data-field="rest" value="${esc(ex.rest || 0)}" /></div>
+    </div>
+    <div class="field"><label>Intensity</label><input class="input" data-admin-edit-ex="${i}" data-field="intensity" value="${esc(ex.intensity || "")}" /></div>
+    <div class="field"><label>Notes</label><textarea data-admin-edit-ex="${i}" data-field="notes">${esc(ex.notes || "")}</textarea></div>
+  </article>`;
+}
+function AdminCreateUserForm() {
+  return `<div class="admin-section section-gap admin-create-user">
+    <div class="admin-section-head">
+      <div>
+        <div class="eyebrow">Create Access</div>
+        <div class="card-title">Add User</div>
+      </div>
+      <span class="chip success">Live</span>
+    </div>
+    <div class="admin-form-grid">
+      <div class="field">
+        <label>User Email</label>
+        <input class="input" data-admin-create="email" type="email" placeholder="athlete@example.com" />
+      </div>
+      <div class="field">
+        <label>Temporary Password</label>
+        <input class="input" data-admin-create="password" type="password" placeholder="Set temporary password" />
+      </div>
+      <div class="field">
+        <label>Role</label>
+        <select class="input" data-admin-create="role">
+          ${[ROLES.ATHLETE, ROLES.VIEWER, ROLES.ADMIN, ROLES.OWNER].map((item) => `<option value="${item}">${roleLabel(item)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Athlete Access</label>
+        <select class="input" data-admin-create="athlete">
+          <option value="new">New athlete profile</option>
+          <option value="current">Mohammad / current profile</option>
+          <option value="">No athlete yet</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%" data-action="admin-create-user">Create User</button>
+    ${state.adminCreateStatus ? `<div class="admin-note">${esc(state.adminCreateStatus)}</div>` : `<div class="admin-note">Password creation runs through the create-user Edge Function. The service role key stays in Supabase Secrets and never appears in this app.</div>`}
+  </div>`;
+}
+function AdminAction(title, description, functionName) {
+  return `<button class="admin-action-card" disabled>
+    <strong>${esc(title)}</strong>
+    <span>${esc(description)}</span>
+    <em>${esc(functionName)}</em>
+  </button>`;
+}
+function AdminChecklist(label, done) {
+  return `<div class="admin-check ${done ? "done" : ""}"><span>${done ? "✓" : "•"}</span><strong>${esc(label)}</strong></div>`;
 }
 function BottomNav() {
   const items = [["home","Home","home"],["plan","Plan","plan"],["logs","Logs","logs"],["nutrition","Nutrition","nutrition"],["progress","Progress","progress"]];
@@ -1091,6 +1371,71 @@ function bind() {
     saveAll();
     render();
   }));
+  document.querySelectorAll("[data-admin-athlete-select]").forEach((el) => el.addEventListener("change", async () => {
+    try {
+      await loadAdminPlayer(el.value);
+    } catch (error) {
+      state.adminPlanStatus = error.message || "Could not load selected player.";
+      render();
+    }
+  }));
+  document.querySelectorAll("[data-admin-plan-day]").forEach((el) => el.addEventListener("click", () => {
+    state.adminPlanDay = Number(el.dataset.adminPlanDay);
+    render();
+  }));
+  document.querySelectorAll("[data-admin-plan-field]").forEach((el) => el.addEventListener("input", () => {
+    const plan = planForAdminEditor();
+    const idx = Number(el.dataset.adminPlanField);
+    const field = el.dataset.field;
+    plan.days[idx][field] = el.type === "number" ? Number(el.value || 0) : el.value;
+    state.adminPlanDraft = plan;
+  }));
+  document.querySelectorAll("[data-admin-edit-ex]").forEach((el) => el.addEventListener("input", () => {
+    const plan = planForAdminEditor();
+    const idx = Number(state.adminPlanDay || 0);
+    const exIdx = Number(el.dataset.adminEditEx);
+    const field = el.dataset.field;
+    plan.days[idx].exercises[exIdx][field] = el.type === "number" ? Number(el.value || 0) : el.value;
+    state.adminPlanDraft = plan;
+  }));
+  document.querySelectorAll("[data-admin-nutrition]").forEach((el) => el.addEventListener("click", () => {
+    const plan = planForAdminEditor();
+    const idx = Number(el.dataset.adminNutrition);
+    const type = el.dataset.type;
+    const presets = { HIGH: { calories: 2200, carbs: 200, fats: 71 }, MED: { calories: 2050, carbs: 150, fats: 77 }, LOW: { calories: 1850, carbs: 80, fats: 86 } };
+    plan.days[idx] = { ...plan.days[idx], nutritionType: type, protein: 190, ...presets[type] };
+    state.adminPlanDraft = plan;
+    render();
+  }));
+  document.querySelectorAll("[data-admin-padel]").forEach((el) => el.addEventListener("click", () => {
+    const plan = planForAdminEditor();
+    const idx = Number(el.dataset.adminPadel);
+    plan.days[idx].hasPadel = el.dataset.value === "true";
+    if (plan.days[idx].hasPadel) {
+      plan.days[idx].padelTime ||= "6:00 PM";
+      plan.days[idx].padelDuration ||= 90;
+    }
+    state.adminPlanDraft = plan;
+    render();
+  }));
+  document.querySelectorAll("[data-admin-remove-ex]").forEach((el) => el.addEventListener("click", () => {
+    const plan = planForAdminEditor();
+    const idx = Number(state.adminPlanDay || 0);
+    plan.days[idx].exercises.splice(Number(el.dataset.adminRemoveEx), 1);
+    state.adminPlanDraft = plan;
+    render();
+  }));
+  document.querySelectorAll("[data-admin-move-ex]").forEach((el) => el.addEventListener("click", () => {
+    const plan = planForAdminEditor();
+    const idx = Number(state.adminPlanDay || 0);
+    const from = Number(el.dataset.adminMoveEx);
+    const to = from + Number(el.dataset.dir);
+    const list = plan.days[idx].exercises;
+    if (to < 0 || to >= list.length) return;
+    [list[from], list[to]] = [list[to], list[from]];
+    state.adminPlanDraft = plan;
+    render();
+  }));
   document.querySelectorAll("[data-modal]").forEach((el) => el.addEventListener("click", () => handleModal(el.dataset.modal)));
   manageTimer();
 }
@@ -1115,7 +1460,27 @@ async function handleAction(action) {
   if (action === "toggle-admin-panel") {
     if (!canOpenAdminPanel(state.auth.profile)) return toast("Admin access required");
     state.adminPanelOpen = !state.adminPanelOpen;
+    if (state.adminPanelOpen && !state.adminAthletes.length) {
+      await loadAdminCommandCenter();
+      return;
+    }
     render();
+  }
+  if (action === "admin-refresh-directory") {
+    await loadAdminCommandCenter();
+  }
+  if (action === "admin-create-user") {
+    await createAdminUser();
+  }
+  if (action === "admin-add-exercise") {
+    const plan = planForAdminEditor();
+    const idx = Number(state.adminPlanDay || 0);
+    plan.days[idx].exercises.push({ name: "New Exercise", sets: 3, reps: "8-12", weightTarget: "", intensity: "Moderate", rest: 60, notes: "" });
+    state.adminPlanDraft = plan;
+    render();
+  }
+  if (action === "admin-save-player-plan") {
+    await saveAdminPlayerPlan();
   }
   if (action === "logout") {
     await signOut();
@@ -1165,6 +1530,44 @@ async function handleAction(action) {
     localRemove("mm-padel-logs");
     location.reload();
   }
+}
+async function createAdminUser() {
+  const email = document.querySelector("[data-admin-create='email']")?.value?.trim();
+  const password = document.querySelector("[data-admin-create='password']")?.value || "";
+  const role = document.querySelector("[data-admin-create='role']")?.value || ROLES.ATHLETE;
+  const athleteChoice = document.querySelector("[data-admin-create='athlete']")?.value || "";
+  const athleteMode = athleteChoice === "new" ? "new" : athleteChoice === "current" ? "current" : "none";
+  if (!email || !email.includes("@")) {
+    state.adminCreateStatus = "Enter a valid user email.";
+    render();
+    return;
+  }
+  if (password.length < 8) {
+    state.adminCreateStatus = "Temporary password must be at least 8 characters.";
+    render();
+    return;
+  }
+  state.adminCreateStatus = "Creating user securely...";
+  render();
+  const { data, error } = await supabase.functions.invoke("create-user", {
+    body: {
+      email,
+      password,
+      role,
+      athleteMode,
+      athleteDisplayName: email.split("@")[0],
+      athleteId: athleteChoice === "current" ? state.auth.athlete?.id : null
+    }
+  });
+  if (error || data?.error) {
+    state.adminCreateStatus = data?.error || error?.message || "Could not create user.";
+    render();
+    return;
+  }
+  state.adminCreateStatus = `Created ${data.user.email} as ${roleLabel(data.user.role)}.`;
+  await loadAdminCommandCenter(data.user.athleteId || state.adminSelectedAthleteId || currentAthleteId());
+  toast("User created");
+  render();
 }
 function togglePadel() {
   const today = todayStr();

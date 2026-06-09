@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-06-10
+
+### Admin Player Command Center
+
+Added:
+
+- `src/adminData.js` for owner/admin player directory and activity summary helpers.
+- Player Command Center inside Admin Panel.
+- User/athlete directory loading from Supabase.
+- Selected player activity summary.
+- Selected athlete plan editor.
+- Save selected athlete plan to Supabase by `athlete_id`.
+- Create User flow can now create a new separate athlete profile.
+
+Changed:
+
+- Create User role dropdown now defaults to Athlete for safer admin UX.
+- Service worker cache updated to `v15` and source files use network-first fetching to reduce stale PWA module issues.
+- `create-user` Edge Function now supports `athleteMode: new/current/none`.
+
+Security:
+
+- Service role still remains server-side inside the Supabase Edge Function.
+- Player plan writes remain subject to Supabase RLS by `athlete_id`.
+
+### Admin Panel Create User
+
+Added:
+
+- Supabase Edge Function `create-user`.
+- Admin Panel Add User form with email, temporary password, role, and athlete access fields.
+- Server-side user creation through Supabase Auth Admin API.
+- Server-side profile creation and athlete assignment.
+- Audit log entry for created users.
+
+Changed:
+
+- Service worker cache updated to `v13` and app/style assets use `?v=13`.
+- `ADMIN_PANEL_IMPLEMENTATION.md` now marks Add User as enabled through Edge Function.
+- `EDGE_FUNCTIONS_PLAN.md` now marks `create-user` as implemented and the remaining admin actions as pending.
+
+Security:
+
+- Service role key is stored only as the Supabase Edge Function secret `SERVICE_ROLE_KEY`.
+- No service role key, database password, or private token was added to frontend code.
+
 ## 2026-06-09
 
 ### Cloud Database Upgrade

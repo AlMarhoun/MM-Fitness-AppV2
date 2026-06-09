@@ -5,7 +5,7 @@
   "type": "module",
   "description": "MM Fitness App V2 alpha static PWA for Vercel.",
   "scripts": {
-    "check": "node --check src/app.js && node --check src/auth.js && node --check src/storage.js && node --check src/sessionPersistence.js && node --check src/performance.js && node --check src/history.js && node --check src/roles.js && node --check src/permissions.js && node --check src/sync.js && node --check src/db.js && node --check src/supabase.js && node --check sw.js",
+    "check": "node --check src/app.js && node --check src/auth.js && node --check src/storage.js && node --check src/sessionPersistence.js && node --check src/performance.js && node --check src/history.js && node --check src/roles.js && node --check src/permissions.js && node --check src/adminData.js && node --check src/sync.js && node --check src/db.js && node --check src/supabase.js && node --check sw.js",
     "validate:manifest": "python3 -m json.tool manifest.json > /dev/null"
   }
 }
