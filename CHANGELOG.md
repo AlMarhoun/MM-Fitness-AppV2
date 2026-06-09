@@ -2,6 +2,37 @@
 
 ## 2026-06-09
 
+### Cloud Database Upgrade
+
+Added:
+
+- `supabase/migrations/001_initial_schema.sql`
+- `supabase/migrations/002_roles_permissions.sql`
+- `supabase/migrations/003_rls_policies.sql`
+- `src/sync.js`
+- `src/permissions.js`
+- `SUPABASE_DATABASE_ARCHITECTURE.md`
+- `PERMISSIONS_SYSTEM.md`
+- `SECURITY_RLS_REPORT.md`
+- `EDGE_FUNCTIONS_PLAN.md`
+- `LOCAL_TO_SUPABASE_MIGRATION_PLAN.md`
+- `MULTI_DEVICE_SYNC_PLAN.md`
+- `ADMIN_PANEL_IMPLEMENTATION.md`
+
+Changed:
+
+- Cloud sync now targets normalized Supabase tables instead of only a single local-style app snapshot.
+- `localStorage` is now positioned as active workout draft, offline fallback, cache, and backup/export.
+- Admin Panel now displays Users, Roles, Permissions, Athlete Assignments, Settings, and Security/Audit structure.
+- Service worker cache updated to `v12` and app/style assets use `?v=12`.
+- Owner email fallback added for `M@Mytamreen.com`.
+
+Not completed:
+
+- Edge Functions are planned but not implemented.
+- RLS policies are authored but not live-tested in Supabase from this environment.
+- No deploy, merge, or push was performed.
+
 ### Phase 1: Active Workout Resume
 
 Added:

@@ -1,5 +1,52 @@
 # QA Results
 
+## Cloud Database Upgrade
+
+Date: 2026-06-09
+
+### Checks Performed
+
+- Auth/profile data layer reviewed.
+- Normalized database migrations authored.
+- RLS policies authored for all private tables.
+- Frontend syntax check run through `npm run check`: PASS.
+- Manifest validation run through `npm run validate:manifest`: PASS.
+- Secret-pattern scan: PASS with documentation-only matches.
+
+### Review Passes
+
+1. Database Schema Review: PASS WITH LIVE-TEST CAVEAT
+   - Tables, relationships, indexes, and snapshots are represented.
+   - Needs Supabase SQL execution validation.
+
+2. RLS / Security Review: PASS WITH LIVE-TEST CAVEAT
+   - Policies authored, helper functions added.
+   - Cannot claim production security until tested in Supabase.
+
+3. Permissions System Review: PASS
+   - Role defaults and permission keys added in SQL and frontend catalog.
+
+4. Front-End Integration Review: PARTIAL
+   - Storage now routes cloud save/load through normalized sync layer.
+   - Existing UI preserved.
+   - Requires live Supabase database test.
+
+5. Migration Review: PASS AS PLAN
+   - Backup-first local-to-cloud plan documented.
+   - No automatic destructive migration.
+
+6. Multi-Device Sync Review: PARTIAL
+   - Data model and sync layer support multi-device access after login.
+   - Requires real iPhone/Mac same-account test after migrations.
+
+7. Admin Panel Review: PARTIAL
+   - Structure and permissions table visible to owner/admin.
+   - Mutations disabled pending Edge Functions.
+
+8. Regression Review: PENDING LIVE APP TEST
+   - Syntax checks pass when command succeeds.
+   - Full rendered mobile regression still required after deploy.
+
 Date: 2026-06-09
 
 ## Phase 1: Active Workout Resume

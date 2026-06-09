@@ -1,5 +1,6 @@
 import { authState, currentAthleteId, currentUserId } from "./auth.js";
-import { getAppSetting, insertBackupExport, upsertAppSetting } from "./db.js";
+import { fetchCloudDataset, insertBackupExport } from "./db.js";
+import { cloudDatasetToSnapshot, syncSnapshotToCloud } from "./sync.js";
 
 export const LOCAL_KEYS = [
   "mm-theme",
@@ -13,9 +14,8 @@ export const LOCAL_KEYS = [
   "mm-auth-mode"
 ];
 
-const CLOUD_STATE_KEY = "app_state";
 let syncTimer = null;
-let lastSyncStatus = { label: "Local", detail: "Local backup active", state: "local" };
+let lastSyncStatus = { label: "Local", detail: "Local draft active", state: "local" };
 
 export function localRead(key, fallback) {
   try {
@@ -95,24 +95,30 @@ function setSyncStatus(next) {
 
 export async function loadCloudSnapshot() {
   const athleteId = currentAthleteId();
+  const userId = currentUserId();
   if (!athleteId) return null;
-  const row = await getAppSetting(athleteId, CLOUD_STATE_KEY);
-  return row?.setting_value || null;
+  setSyncStatus({ label: "Loading data", detail: "Loading cloud database", state: "loading" });
+  const dataset = await fetchCloudDataset(athleteId);
+  const snapshot = cloudDatasetToSnapshot(dataset, getLocalBackupSnapshot());
+  setSyncStatus({ label: "Saved", detail: userId ? "Cloud database loaded" : "Local fallback active", state: "saved" });
+  return snapshot;
 }
 
 export async function saveCloudSnapshot(snapshot) {
   const athleteId = currentAthleteId();
-  if (!athleteId) {
-    setSyncStatus({ label: "Local", detail: "Sign in to cloud sync", state: "local" });
+  const userId = currentUserId();
+  if (!athleteId || !userId) {
+    setSyncStatus({ label: "Local draft", detail: "Sign in to save to cloud", state: "local" });
     return null;
   }
-  setSyncStatus({ label: "Saving", detail: "Cloud sync in progress", state: "saving" });
+  if (!navigator.onLine) {
+    setSyncStatus({ label: "Offline", detail: "Cloud sync pending", state: "offline" });
+    return null;
+  }
+  setSyncStatus({ label: "Saving", detail: "Saving to Supabase database", state: "saving" });
   try {
-    const result = await upsertAppSetting(athleteId, CLOUD_STATE_KEY, {
-      ...snapshot,
-      syncedAt: new Date().toISOString()
-    });
-    setSyncStatus({ label: "Saved", detail: "Cloud backup updated", state: "saved" });
+    const result = await syncSnapshotToCloud(athleteId, userId, snapshot);
+    setSyncStatus({ label: "Saved", detail: "Cloud database updated", state: "saved" });
     return result;
   } catch (error) {
     setSyncStatus({ label: "Sync error", detail: error.message || "Cloud sync failed", state: "error" });

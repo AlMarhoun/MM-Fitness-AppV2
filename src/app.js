@@ -2,6 +2,7 @@ import { authState, initAuth, isAdmin, signIn, signOut } from "./auth.js";
 import { dayHistory, monthCalendar } from "./history.js";
 import { createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js";
 import { ROLE_DEFINITIONS, ROLES, canOpenAdminPanel, roleLabel } from "./roles.js";
+import { PERMISSIONS } from "./permissions.js";
 import { downloadLocalBackup, getSyncStatus, importLocalBackupFile, loadCloudSnapshot, localRead, localRemove, localWrite, queueCloudSnapshot, recordBackupExport, saveCloudSnapshot } from "./storage.js";
 import { clearSessionUi, persistWorkoutUiState, readSessionUi, shouldResumeActiveWorkout } from "./sessionPersistence.js";
 
@@ -858,7 +859,7 @@ function Progress() {
         <div>
           <div class="card-title">Cloud Account</div>
           <div class="day-meta">${esc(state.auth.profile?.email || state.auth.user?.email || "")}</div>
-          <div class="day-meta">Role: ${esc(state.auth.profile?.role || "player")} · ${esc((state.syncStatus || getSyncStatus()).detail)}</div>
+          <div class="day-meta">Role: ${esc(state.auth.profile?.role || "athlete")} · ${esc((state.syncStatus || getSyncStatus()).detail)}</div>
         </div>
         ${SyncBadge()}
       </div>
@@ -879,9 +880,9 @@ function AdminPanel() {
   const currentEmail = state.auth.profile?.email || state.auth.user?.email || "Signed-in user";
   return `<section class="form-card section-gap admin-panel">
     <div class="card-title">Admin Panel</div>
-    <div class="paused-banner" style="text-align:left">Secure invite and role changes require a Supabase Edge Function or trusted backend. No service role key is used in this frontend.</div>
+    <div class="paused-banner" style="text-align:left">Cloud database storage is active after Supabase migrations are applied. User invitation, role changes, and permission writes require Supabase Edge Functions or a trusted backend. No service role key is used in this frontend.</div>
     <div class="section-gap">
-      <div class="eyebrow">Current User List</div>
+      <div class="eyebrow">Users</div>
       <div class="admin-user-row">
         <div>
           <strong>${esc(currentEmail)}</strong>
@@ -891,21 +892,38 @@ function AdminPanel() {
       </div>
     </div>
     <div class="section-gap">
-      <div class="eyebrow">Add / Invite User</div>
+      <div class="eyebrow">Invite User</div>
       <div class="field"><label>Email</label><input class="input" disabled placeholder="athlete@example.com" /></div>
       <div class="field"><label>Role</label><select class="input" disabled>${Object.values(ROLES).map((item) => `<option>${item}</option>`).join("")}</select></div>
       <button class="btn btn-secondary" style="width:100%" disabled>Invite via secure backend</button>
       <div class="metric-sub section-gap">Production flow: owner/admin submits invite request to Edge Function; backend uses service role securely; RLS prevents self-promotion and cross-user access.</div>
     </div>
     <div class="section-gap">
-      <div class="eyebrow">Role Rules</div>
+      <div class="eyebrow">Roles</div>
       ${Object.entries(ROLE_DEFINITIONS).map(([key, description]) => `<div class="summary-line"><span>${roleLabel(key)}</span><strong>${esc(description)}</strong></div>`).join("")}
+    </div>
+    <div class="section-gap">
+      <div class="eyebrow">Permissions</div>
+      ${Object.entries(PERMISSIONS).map(([category, keys]) => `<details class="permission-group"><summary>${esc(category.replaceAll("_", " "))}</summary>${keys.map((key) => `<span class="chip">${esc(key)}</span>`).join("")}</details>`).join("")}
+    </div>
+    <div class="section-gap">
+      <div class="eyebrow">Athlete Assignments</div>
+      <div class="metric-sub">Assign users to athlete profiles through the pending assign-athlete Edge Function.</div>
+    </div>
+    <div class="section-gap">
+      <div class="eyebrow">Settings</div>
+      <div class="metric-sub">Owner-level settings are stored in Supabase app_settings after migrations are applied.</div>
+    </div>
+    <div class="section-gap">
+      <div class="eyebrow">Security / Audit Logs</div>
+      <div class="metric-sub">Sensitive admin actions must write to audit_logs from trusted Edge Functions.</div>
     </div>
     <div class="section-gap">
       <div class="eyebrow">Available Actions Structure</div>
       <div class="admin-action-grid">
         <button class="mini-btn" disabled>Add user</button>
         <button class="mini-btn" disabled>Invite user</button>
+        <button class="mini-btn" disabled>Grant permission</button>
         <button class="mini-btn" disabled>Change role</button>
         <button class="mini-btn" disabled>Deactivate</button>
         <button class="mini-btn" disabled>Assign athlete</button>
@@ -1318,5 +1336,14 @@ async function boot() {
 boot();
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  navigator.serviceWorker.register("./sw.js").then((registration) => {
+    registration.update().catch(() => {});
+    if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!sessionStorage.getItem("mm-sw-reloaded")) {
+      sessionStorage.setItem("mm-sw-reloaded", "1");
+      location.reload();
+    }
+  });
 }

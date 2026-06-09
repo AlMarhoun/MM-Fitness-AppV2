@@ -773,6 +773,25 @@ textarea { min-height: 86px; resize: vertical; }
 .admin-panel button:disabled {
   opacity: .62;
 }
+.permission-group {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,.025);
+}
+.permission-group + .permission-group { margin-top: 8px; }
+.permission-group summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.permission-group .chip {
+  margin: 8px 6px 0 0;
+  font-size: 10px;
+}
 .admin-user-row {
   display: flex;
   align-items: center;

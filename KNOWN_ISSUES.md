@@ -1,5 +1,15 @@
 # Known Issues
 
+## Cloud Database Upgrade
+
+- Supabase SQL migrations must be applied manually before normalized cloud storage works.
+- RLS policies are written but still require live Supabase testing.
+- Edge Functions for invite/user creation/role changes/permission updates/deactivation/athlete assignment are planned but not implemented.
+- Existing localStorage data is not deleted automatically; user should export backup before migration.
+- Active workout remains local-first by design until finished/synced.
+- If Supabase Auth public signup is enabled in dashboard settings, it must be disabled/invite-only manually.
+- Owner bootstrap requires the `M@Mytamreen.com` Auth user/profile to exist.
+
 ## Phase 1: Active Workout Resume
 
 - Pending device validation: real iPhone Add to Home Screen lock/unlock testing is still required before considering this issue 100% closed.

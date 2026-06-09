@@ -1,13 +1,15 @@
-const CACHE_NAME = "mm-fitness-app-v11-upload-ready";
+const CACHE_NAME = "mm-fitness-app-v12-cloud-db";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./src/styles.css?v=11",
-  "./src/app.js?v=11",
+  "./src/styles.css?v=12",
+  "./src/app.js?v=12",
   "./src/history.js",
   "./src/performance.js",
   "./src/roles.js",
+  "./src/permissions.js",
+  "./src/sync.js",
   "./src/supabase.js",
   "./src/auth.js",
   "./src/db.js",
@@ -35,6 +37,10 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {

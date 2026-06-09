@@ -12,12 +12,19 @@ export const ROLE_DEFINITIONS = {
   [ROLES.VIEWER]: "Read-only access to assigned athlete data only."
 };
 
+export const OWNER_EMAIL = "m@mytamreen.com";
+
+export function isOwnerEmail(email = "") {
+  return String(email).trim().toLowerCase() === OWNER_EMAIL;
+}
+
 export function normalizeRole(role) {
+  if (role === "player") return ROLES.ATHLETE;
   return Object.values(ROLES).includes(role) ? role : ROLES.ATHLETE;
 }
 
 export function canOpenAdminPanel(profile) {
-  const role = normalizeRole(profile?.role);
+  const role = isOwnerEmail(profile?.email) ? ROLES.OWNER : normalizeRole(profile?.role);
   return role === ROLES.OWNER || role === ROLES.ADMIN;
 }
 
