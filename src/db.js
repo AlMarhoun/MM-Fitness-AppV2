@@ -57,6 +57,10 @@ export async function getOrCreateAthlete(user, profile) {
   if (readError) throw readError;
   if (existing?.athletes) return existing.athletes;
 
+  // Admins and viewers require an explicit athlete assignment. They must not
+  // silently create a private athlete profile during authentication.
+  if (profile?.role === ROLES.ADMIN || profile?.role === ROLES.VIEWER) return null;
+
   const { data: athlete, error: athleteError } = await supabase
     .from("athletes")
     .insert({

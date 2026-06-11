@@ -1,4 +1,5 @@
 import { fetchCloudDataset } from "./db.js";
+import { signedAvatarUrl } from "./profile.js";
 import { cloudDatasetToSnapshot } from "./sync.js";
 
 function normalizeRole(profile) {
@@ -32,7 +33,7 @@ export async function loadAdminDirectory(supabase) {
   const [profiles, athletes, assignments] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id,email,display_name,is_active,created_at,roles(name)")
+      .select("id,email,display_name,avatar_path,bio,is_active,created_at,roles(name)")
       .order("created_at", { ascending: false }),
     supabase
       .from("athletes")
@@ -48,11 +49,13 @@ export async function loadAdminDirectory(supabase) {
     if (result.error) throw result.error;
   }
 
-  const userMap = new Map((profiles.data || []).map((profile) => [profile.id, {
+  const profilesWithAvatars = await Promise.all((profiles.data || []).map(async (profile) => ({
     ...profile,
     role: normalizeRole(profile),
+    avatar_url: await signedAvatarUrl(profile.avatar_path),
     assignments: []
-  }]));
+  })));
+  const userMap = new Map(profilesWithAvatars.map((profile) => [profile.id, profile]));
   const athleteMap = new Map((athletes.data || []).map((athlete) => [athlete.id, {
     ...athlete,
     users: []

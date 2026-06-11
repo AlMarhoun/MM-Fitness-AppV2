@@ -1,6 +1,6 @@
 # Security RLS Report
 
-Status: migrations authored, not live-tested in Supabase from this environment.
+Status: migrations 001-005 have been applied to the linked Supabase project. Static policy checks pass; full cross-role live testing remains pending.
 
 ## Helper Functions
 
@@ -48,7 +48,7 @@ RLS is enabled in `003_rls_policies.sql` for:
 
 ## Risk Notes
 
-- RLS must be applied and tested in Supabase before production security can be claimed.
+- Migrations are applied, but owner/admin/athlete/viewer isolation still needs a live multi-account test before production security can be claimed.
 - Edge Functions are still pending.
 - Public signup must be disabled/invite-only in Supabase Auth settings.
 - Owner profile must exist before owner bootstrap update can assign role.
@@ -61,3 +61,16 @@ RLS is enabled in `003_rls_policies.sql` for:
 - Admin cannot remove or demote owner.
 - Owner can view Admin Panel and manage permissions through future Edge Function.
 - Frontend contains no service role key.
+
+## Profile Avatar Storage
+
+- Bucket: `profile-avatars` (private).
+- User uploads are restricted to the authenticated user's own folder.
+- Read access requires self access, `users.view`, or an allowed shared athlete assignment.
+- The UI consumes temporary signed URLs; the bucket is not public.
+
+## Self-Athlete Edit Policy
+
+- A `self` athlete assignment can edit its own athlete data.
+- Viewer assignments remain read-only.
+- Admin/coach/owner assignments require `workouts.edit_assigned`, except the system owner role.

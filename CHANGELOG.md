@@ -1,5 +1,67 @@
 # Changelog
 
+## June 12, 2026 - Repository Pre-Push Cleanup
+
+- Removed unreferenced legacy brand mockups and source assets.
+- Removed local Supabase CLI temporary files.
+- Expanded `.gitignore` for secrets, Supabase temp data, coverage, caches, and editor files.
+- Updated README commands and PWA cache information to version 19.
+
+## June 12, 2026 - Flexible Daily Activities
+
+- Added Daily Activities inside Logs for any selected calendar date.
+- Added Padel and Swimming activity types with time, duration, intensity, and notes.
+- Supports multiple activities on the same day, including Padel and Swimming together.
+- Replaced the restricted Home Padel quick action with an always-available Activity action.
+- Preserved old Padel logs as legacy activity entries.
+- Added activity indicators and details to History / Calendar.
+- Added local backup and Supabase app-settings sync for activity logs.
+- Bumped PWA assets and cache to version 19.
+
+## June 12, 2026 - Strength Progress Line Chart
+
+- Replaced the Strength Progress column chart with a responsive line chart.
+- Added Daily, Weekly, and Monthly volume views.
+- Daily view shows the latest 14 recorded training days.
+- Weekly view groups Sunday through Saturday for the latest 12 weeks.
+- Monthly view groups the latest 12 recorded months.
+- Added tested centralized volume-trend aggregation in `src/performance.js`.
+- Persisted the selected chart period locally.
+- Bumped PWA assets and cache to version 18.
+
+## June 11, 2026 - Premium Profile and Admin Workspace
+
+- Fixed the oversized Strength Progress chart shown when only one volume data point exists.
+- Added a dedicated Profile screen and header avatar entry.
+- Moved Admin Panel and player management out of Progress into Admin Workspace.
+- Added private profile-picture upload and signed avatar display.
+- Added a mobile player directory with isolated player details, activity, and plan editing.
+- Added Supabase migrations for private profile avatars and self-athlete authorization.
+- Fixed a 4px Active Workout overflow at 320px and 360px.
+- Added static security validation and a documented quality gate.
+
+## 2026-06-11
+
+### iOS Add to Home Screen Redirect Fix
+
+Fixed:
+
+- Removed the cached `/index.html` navigation fallback that caused Safari's `Response served by service worker has redirections` error.
+- Changed PWA launch URL from `/index.html` to `/`.
+- Stopped the service worker from intercepting document navigation.
+- Prevented redirected responses from entering Cache Storage.
+- Added network-first source asset handling and `updateViaCache: none`.
+
+Added:
+
+- `PWA_IOS_REDIRECT_FIX.md`
+- `scripts/validate-pwa.mjs`
+- `npm run validate:pwa`
+
+Changed:
+
+- PWA cache version increased to `v16`.
+
 ## 2026-06-10
 
 ### Admin Player Command Center

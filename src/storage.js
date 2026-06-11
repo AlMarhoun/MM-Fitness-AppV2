@@ -8,6 +8,7 @@ export const LOCAL_KEYS = [
   "mm-workout-logs",
   "mm-nutrition-logs",
   "mm-padel-logs",
+  "mm-activity-logs",
   "mm-plan",
   "mm-active-workout",
   "mm-session-ui",

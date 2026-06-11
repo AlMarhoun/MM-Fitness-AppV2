@@ -13,7 +13,9 @@ Remaining dangerous write actions stay disabled until their own Edge Functions a
 
 ## Location
 
-Progress -> Settings -> Admin Panel.
+Profile avatar -> Admin Workspace.
+
+Administration is no longer mixed into Progress. Progress contains only performance information and a link to Account & Settings.
 
 ## Visible To
 
@@ -69,6 +71,8 @@ The Admin Panel now includes a focused owner/admin command surface:
   - latest daily log
 - Edits the selected athlete's workout plan.
 - Saves the selected athlete's plan to Supabase by `athlete_id`.
+- Shows each player's private profile picture when one is available.
+- Uses a dedicated mobile player directory instead of placing management controls in Progress.
 
 Important:
 

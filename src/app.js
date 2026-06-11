@@ -1,9 +1,11 @@
 import { authState, initAuth, isAdmin, signIn, signOut } from "./auth.js";
 import { loadAdminAthleteSnapshot, loadAdminDirectory, summarizeAthleteSnapshot } from "./adminData.js";
-import { dayHistory, monthCalendar } from "./history.js";
-import { createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js";
+import { activitiesForDate, activityCount, activityLabel, addActivity, removeActivity } from "./activities.js?v=19";
+import { dayHistory, monthCalendar } from "./history.js?v=19";
+import { aggregateVolumeTrend, createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js?v=18";
 import { ROLE_DEFINITIONS, ROLES, canOpenAdminPanel, isOwnerEmail, roleLabel } from "./roles.js";
 import { PERMISSIONS } from "./permissions.js";
+import { initials, signedAvatarUrl, updateOwnProfile, uploadOwnAvatar } from "./profile.js";
 import { supabase } from "./supabase.js";
 import { downloadLocalBackup, getSyncStatus, importLocalBackupFile, loadCloudSnapshot, localRead, localRemove, localWrite, queueCloudSnapshot, recordBackupExport, saveCloudSnapshot } from "./storage.js";
 import { clearSessionUi, persistWorkoutUiState, readSessionUi, shouldResumeActiveWorkout } from "./sessionPersistence.js";
@@ -130,11 +132,13 @@ const state = {
   workoutLogs: read("mm-workout-logs", {}),
   nutritionLogs: read("mm-nutrition-logs", {}),
   padelLogs: read("mm-padel-logs", {}),
+  activityLogs: read("mm-activity-logs", {}),
   plan: read("mm-plan", PLAN),
   activeWorkout: initialActiveWorkout,
   activeCursor: initialSessionUi.activeCursor || null,
   lastWorkoutSummary: null,
   historySelectedDate: initialSessionUi.historySelectedDate || todayStr(),
+  strengthPeriod: read("mm-strength-period", "daily"),
   adminPanelOpen: false,
   auth: { ...authState },
   syncStatus: getSyncStatus(),
@@ -148,6 +152,7 @@ const state = {
   adminPlanDraft: null,
   adminPlanDay: 0,
   adminPlanStatus: "",
+  profileStatus: "",
   toast: "",
   modal: null,
   splashDone: resumeActiveWorkout || (!forceSplash && sessionStorage.getItem("mm-splash-done") === "1")
@@ -173,6 +178,7 @@ function appSnapshot() {
       "mm-workout-logs": state.workoutLogs,
       "mm-nutrition-logs": state.nutritionLogs,
       "mm-padel-logs": state.padelLogs,
+      "mm-activity-logs": state.activityLogs,
       "mm-plan": state.plan,
       "mm-active-workout": state.activeWorkout,
       "mm-session-ui": readSessionUi({})
@@ -187,6 +193,7 @@ function hydrateFromSnapshot(snapshot) {
   state.workoutLogs = data["mm-workout-logs"] || state.workoutLogs;
   state.nutritionLogs = data["mm-nutrition-logs"] || state.nutritionLogs;
   state.padelLogs = data["mm-padel-logs"] || state.padelLogs;
+  state.activityLogs = data["mm-activity-logs"] || state.activityLogs;
   state.plan = data["mm-plan"] || state.plan;
   if (!state.activeWorkout) state.activeWorkout = data["mm-active-workout"] || state.activeWorkout;
   write("mm-theme", state.theme);
@@ -194,6 +201,7 @@ function hydrateFromSnapshot(snapshot) {
   write("mm-workout-logs", state.workoutLogs);
   write("mm-nutrition-logs", state.nutritionLogs);
   write("mm-padel-logs", state.padelLogs);
+  write("mm-activity-logs", state.activityLogs);
   write("mm-plan", state.plan);
   if (state.activeWorkout) write("mm-active-workout", state.activeWorkout);
   else localRemove("mm-active-workout");
@@ -206,6 +214,7 @@ function saveAll() {
   write("mm-workout-logs", state.workoutLogs);
   write("mm-nutrition-logs", state.nutritionLogs);
   write("mm-padel-logs", state.padelLogs);
+  write("mm-activity-logs", state.activityLogs);
   write("mm-plan", state.plan);
   if (state.activeWorkout) write("mm-active-workout", state.activeWorkout);
   else localRemove("mm-active-workout");
@@ -308,7 +317,8 @@ function weekStats() {
   const dates = weekDates();
   return {
     workouts: dates.filter((d) => state.workoutLogs[d]?.completed).length,
-    padel: dates.filter((d) => state.padelLogs[d]?.completed).length,
+    padel: activityCount(state.activityLogs, "padel", dates, state.padelLogs),
+    swimming: activityCount(state.activityLogs, "swimming", dates, state.padelLogs),
     nutrition: dates.filter((d) => state.nutritionLogs[d]?.adhered === "yes").length
   };
 }
@@ -375,7 +385,9 @@ function icon(name) {
     check: '<path d="m5 13 4 4L19 7"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     spark: '<path d="m13 2-2 8h7l-8 12 2-9H5l8-11Z"/>',
-    settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12h2m12 0h2M12 4v2m0 12v2m-5.6-2.4 1.4-1.4m8.4-8.4 1.4-1.4m0 11.2-1.4-1.4M7.8 7.8 6.4 6.4"/>'
+    settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12h2m12 0h2M12 4v2m0 12v2m-5.6-2.4 1.4-1.4m8.4-8.4 1.4-1.4m0 11.2-1.4-1.4M7.8 7.8 6.4 6.4"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'
   };
   return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.home}</svg>`;
 }
@@ -413,6 +425,8 @@ function route() {
   if (state.screen === "logs") return Logs();
   if (state.screen === "nutrition") return Nutrition();
   if (state.screen === "progress") return Progress();
+  if (state.screen === "profile") return ProfileScreen();
+  if (state.screen === "admin") return canOpenAdminPanel(state.auth.profile) ? AdminScreen() : Home();
   return Home();
 }
 function BootScreen() {
@@ -441,8 +455,17 @@ function LoginScreen() {
     </section>
   </section>`;
 }
-function Header(title, eyebrow, right = brandGlyph("screen-signature")) {
+function Header(title, eyebrow, right = ProfileAvatarButton()) {
   return `<header class="screen-head"><div><div class="eyebrow">${eyebrow}</div><h1 class="h1">${title}</h1></div>${right}</header>`;
+}
+function Avatar(profile = state.auth.profile, className = "profile-avatar") {
+  const name = profile?.display_name || profile?.email || "MM";
+  return profile?.avatar_url
+    ? `<img class="${className}" src="${esc(profile.avatar_url)}" alt="${esc(name)} profile" />`
+    : `<span class="${className} avatar-fallback">${esc(initials(name))}</span>`;
+}
+function ProfileAvatarButton() {
+  return `<button class="profile-avatar-btn" data-nav="profile" aria-label="Open profile">${Avatar()}</button>`;
 }
 function HomeHeader() {
   return `<header class="home-head">
@@ -452,7 +475,7 @@ function HomeHeader() {
       <h1 class="h1">Mohammad</h1>
       ${SyncBadge()}
     </div>
-    <button class="readiness-orb" data-action="theme"><strong>${readinessScore()}</strong><span>Readiness</span></button>
+    <div class="home-head-actions">${ProfileAvatarButton()}<button class="readiness-orb" data-action="theme"><strong>${readinessScore()}</strong><span>Readiness</span></button></div>
   </header>`;
 }
 function SyncBadge() {
@@ -532,7 +555,7 @@ function Home() {
         ${Quick("Log Weight", "weight", !!log.bodyWeight, "logs")}
         ${Quick("Nutrition", "nutrition", !!nl?.adhered, "nutrition")}
         ${Quick("Recovery", "moon", !!log.sleepScore, "logs")}
-        ${Quick("Padel", "play", !!state.padelLogs[today]?.completed, "padel", !d.hasPadel)}
+        ${Quick("Activity", "play", activitiesForDate(state.activityLogs, today, state.padelLogs).length > 0, "activity")}
       </div>
     </section>`;
 }
@@ -557,7 +580,7 @@ function getNextAction(d, wl, nl, log) {
   if (d.exercises.length && !wl?.completed) return { label: "Start Workout", action: "start-today" };
   if (!nl?.adhered) return { label: "Log Nutrition", action: "go-nutrition" };
   if (!log.sleepScore || !log.energyScore) return { label: "Log Recovery", action: "go-logs" };
-  if (d.hasPadel && !state.padelLogs[todayStr()]?.completed) return { label: "Mark Padel", action: "toggle-padel" };
+  if (d.hasPadel && !activitiesForDate(state.activityLogs, todayStr(), state.padelLogs).some((activity) => activity.type === "padel" && activity.completed)) return { label: "Log Padel", action: "toggle-padel" };
   return { label: "Review Progress", action: "go-progress" };
 }
 function Plan() {
@@ -765,6 +788,7 @@ function Logs() {
   const log = state.logs[todayStr()] || {};
   return `${Header("Logs", "Daily review")}
     ${HistoryCalendar()}
+    ${DailyActivities(state.historySelectedDate)}
     <section class="form-card">
       <div class="card-title">Body Metrics</div>
       ${Field("Weight (kg)", "bodyWeight", log.bodyWeight || "", "number", "e.g. 99.1")}
@@ -789,12 +813,14 @@ function HistoryCalendar() {
     dailyLogs: state.logs,
     nutritionLogs: state.nutritionLogs,
     padelLogs: state.padelLogs,
+    activityLogs: state.activityLogs,
     plan: state.plan
   });
   const cells = monthCalendar(state.historySelectedDate, {
     workoutLogs: state.workoutLogs,
     nutritionLogs: state.nutritionLogs,
     padelLogs: state.padelLogs,
+    activityLogs: state.activityLogs,
     plan: state.plan
   });
   return `<section class="card weekly-card section-gap history-panel">
@@ -821,12 +847,13 @@ function CalendarCell(cell) {
     cell.isSelected ? "selected" : "",
     s.workoutCompleted ? "workout" : "",
     s.padelCompleted || s.padelScheduled ? "padel" : "",
+    s.swimmingCompleted ? "swimming" : "",
     s.nutritionAdhered ? "nutrition" : "",
     s.missed ? "missed" : ""
   ].filter(Boolean).join(" ");
   return `<button class="${classes}" data-history-date="${cell.date}">
     <span>${cell.dayNumber}</span>
-    <i></i>
+    <i class="calendar-markers">${s.workoutCompleted ? "<b class='workout'></b>" : ""}${s.padelCompleted || s.padelScheduled ? "<b class='padel'></b>" : ""}${s.swimmingCompleted ? "<b class='swimming'></b>" : ""}${s.nutritionAdhered ? "<b class='nutrition'></b>" : ""}${s.missed && !s.workoutCompleted ? "<b class='missed'></b>" : ""}</i>
   </button>`;
 }
 function HistoryDaySummary(history) {
@@ -834,6 +861,7 @@ function HistoryDaySummary(history) {
   const log = history.dailyLog || {};
   const nutrition = history.nutrition || {};
   const padel = history.padel || {};
+  const activities = history.activities || [];
   return `<div class="history-summary">
     <div class="summary-line"><span>Workout</span><strong>${summary ? esc(summary.workoutName) : history.status.missed ? "Missed / not logged" : "No workout logged"}</strong></div>
     ${summary ? `
@@ -849,10 +877,33 @@ function HistoryDaySummary(history) {
     ` : ""}
     <div class="summary-divider"></div>
     <div class="summary-line"><span>Nutrition</span><strong>${nutrition.adhered ? esc(nutrition.adhered) : "No nutrition log"}</strong></div>
-    <div class="summary-line"><span>Padel</span><strong>${padel.completed ? `${padel.duration || 0} min completed` : "No padel completed"}</strong></div>
+    <div class="perf-label">Activities</div>
+    ${activities.length ? activities.map(ActivityHistoryRow).join("") : `<div class="empty small">No activity logged.</div>`}
     <div class="summary-line"><span>Body</span><strong>${log.bodyWeight ? `${log.bodyWeight} kg` : "No body metrics"}</strong></div>
     ${log.notes ? `<div class="day-meta history-note">${esc(log.notes)}</div>` : ""}
   </div>`;
+}
+function ActivityHistoryRow(activity) {
+  return `<div class="summary-line"><span>${activityLabel(activity.type)}${activity.time ? ` · ${esc(activity.time)}` : ""}</span><strong>${activity.duration || 0} min · ${esc(activity.intensity || "moderate")}</strong></div>`;
+}
+function DailyActivities(date) {
+  const activities = activitiesForDate(state.activityLogs, date, state.padelLogs);
+  return `<section class="form-card section-gap activity-panel">
+    <div class="activity-panel-head">
+      <div><div class="card-title">Daily Activities</div><div class="day-meta">${fmtDate(date)} · Padel or swimming</div></div>
+      <button class="btn btn-primary" data-action="add-activity" style="min-height:40px;padding:0 14px">Add Activity</button>
+    </div>
+    <div class="activity-list section-gap">
+      ${activities.length ? activities.map(ActivityCard).join("") : `<div class="empty small">No padel or swimming logged for this day.</div>`}
+    </div>
+  </section>`;
+}
+function ActivityCard(activity) {
+  return `<article class="activity-card ${activity.type}">
+    <div class="activity-icon">${activity.type === "swimming" ? "≈" : "P"}</div>
+    <div class="activity-info"><strong>${activityLabel(activity.type)}</strong><span>${activity.duration || 0} min · ${esc(activity.intensity || "moderate")}${activity.time ? ` · ${esc(activity.time)}` : ""}</span>${activity.notes ? `<small>${esc(activity.notes)}</small>` : ""}</div>
+    ${activity.source === "legacy" ? `<span class="chip">Legacy</span>` : `<button class="icon-action" data-remove-activity="${esc(activity.id)}" data-activity-date="${esc(activity.date)}" aria-label="Remove ${activityLabel(activity.type)}">×</button>`}
+  </article>`;
 }
 function HistoryExercise(exercise) {
   const sets = exercise.loggedSets || [];
@@ -901,11 +952,12 @@ function NutritionField(label, field, value) {
 function Progress() {
   const ws = weekStats();
   const performance = summarizeProgress(state.workoutLogs, state.plan);
-  const canAdmin = canOpenAdminPanel(state.auth.profile);
   const weight = latestWeight();
   const totalWorkouts = Object.values(state.workoutLogs).filter((w) => w.completed).length;
-  const totalPadel = Object.values(state.padelLogs).filter((p) => p.completed).length;
+  const totalPadel = activityCount(state.activityLogs, "padel", null, state.padelLogs);
   const weights = Object.entries(state.logs).filter(([, v]) => v.bodyWeight).sort(([a], [b]) => a.localeCompare(b)).slice(-8);
+  const strengthTrend = aggregateVolumeTrend(performance.sessions, state.strengthPeriod);
+  const strengthPeriodTotal = strengthTrend.reduce((sum, item) => sum + item.totalVolume, 0);
   return `${Header("Progress", "Performance review")}
     <div class="grid-2">
       <section class="card metric-card"><div class="eyebrow">Current Weight</div><div class="metric-value">${weight ? weight.weight : PLAN.startWeight}<span style="font-size:12px;color:var(--muted)"> kg</span></div><div class="metric-sub">Target ${PLAN.targetWeight} kg</div></section>
@@ -921,12 +973,19 @@ function Progress() {
     </section>
     <section class="card weekly-card section-gap">
       <div class="card-title">Weight Trend</div>
-      ${weights.length > 1 ? `<div class="progress-chart">${weights.map(([, v]) => `<div class="bar" style="--h:${Math.max(18, 150 - (v.bodyWeight - 88) * 5)}px"></div>`).join("")}</div>` : `<div class="empty">Log two weight entries to reveal the trend.</div>`}
+      ${weights.length > 1 ? TrendBars(weights.map(([date, v]) => ({ label: date.slice(5), value: Number(v.bodyWeight || 0) })), "weight") : `<div class="empty">Log two weight entries to reveal the trend.</div>`}
     </section>
     <section class="card weekly-card section-gap">
-      <div class="card-title">Strength Progress</div>
-      <div class="metric-sub">Total logged volume: ${kg(performance.totalVolume)}</div>
-      ${performance.volumeTrend.length ? `<div class="progress-chart compact">${performance.volumeTrend.map((item) => `<div class="bar" title="${esc(item.workoutName)}" style="--h:${Math.max(18, Math.min(150, (item.totalVolume || 0) / 35))}px"></div>`).join("")}</div>` : `<div class="empty">Finish a weighted workout to reveal volume trend.</div>`}
+      <div class="strength-chart-head">
+        <div>
+          <div class="card-title">Strength Progress</div>
+          <div class="metric-sub">${strengthTrend.length ? `${state.strengthPeriod[0].toUpperCase() + state.strengthPeriod.slice(1)} volume: ${kg(strengthPeriodTotal)}` : `Total logged volume: ${kg(performance.totalVolume)}`}</div>
+        </div>
+        <div class="segmented strength-period" aria-label="Strength progress period">
+          ${["daily", "weekly", "monthly"].map((period) => `<button class="${state.strengthPeriod === period ? "active" : ""}" data-strength-period="${period}">${period[0].toUpperCase() + period.slice(1)}</button>`).join("")}
+        </div>
+      </div>
+      ${strengthTrend.length ? VolumeLineChart(strengthTrend) : `<div class="empty">Finish a weighted workout to reveal volume trend.</div>`}
     </section>
     <section class="card weekly-card section-gap">
       <div class="card-title">Best Estimated 1RM</div>
@@ -937,31 +996,111 @@ function Progress() {
       ${performance.prList.length ? performance.prList.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${esc(item.label)}</strong></div>`).join("") : `<div class="empty">PRs will appear after you beat a previous best.</div>`}
     </section>
     <section class="form-card section-gap">
-      <div class="card-title">Settings</div>
-      <div class="segmented"><button class="${state.theme === "dark" ? "active" : ""}" data-theme-set="dark">Dark</button><button class="${state.theme === "light" ? "active" : ""}" data-theme-set="light">Light</button><button data-action="reset-demo">Reset Logs</button></div>
-      ${canAdmin ? `<button class="btn btn-secondary section-gap" style="width:100%" data-action="toggle-admin-panel">Admin Panel</button>` : ""}
-    </section>
-    ${canAdmin && state.adminPanelOpen ? AdminPanel() : ""}
-    <section class="form-card section-gap">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
         <div>
-          <div class="card-title">Cloud Account</div>
+          <div class="card-title">Cloud Performance Data</div>
           <div class="day-meta">${esc(state.auth.profile?.email || state.auth.user?.email || "")}</div>
           <div class="day-meta">Role: ${esc(state.auth.profile?.role || "athlete")} · ${esc((state.syncStatus || getSyncStatus()).detail)}</div>
         </div>
         ${SyncBadge()}
       </div>
+      <button class="btn btn-secondary section-gap" style="width:100%" data-nav="profile">Account & Settings</button>
+    </section>`;
+}
+function ProfileScreen() {
+  const profile = state.auth.profile || {};
+  const canAdmin = canOpenAdminPanel(profile);
+  return `${Header("Profile", "Private athlete identity", `<button class="btn btn-secondary" data-action="profile-back" style="min-height:40px">Back</button>`)}
+    <section class="profile-hero">
+      <div class="profile-avatar-wrap">${Avatar(profile, "profile-avatar profile-avatar-large")}</div>
+      <div class="profile-identity">
+        <div class="eyebrow">${esc(roleLabel(profile.role || ROLES.ATHLETE))}</div>
+        <h2>${esc(profile.display_name || "MM Athlete")}</h2>
+        <p>${esc(profile.email || state.auth.user?.email || "")}</p>
+        <span class="chip success">${esc((state.syncStatus || getSyncStatus()).label)}</span>
+      </div>
+    </section>
+    <section class="form-card section-gap">
+      <div class="card-title">Personal Profile</div>
+      <div class="field"><label>Profile Picture</label><input class="input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" data-profile-avatar /></div>
+      <div class="field"><label>Display Name</label><input class="input" data-profile-field="display_name" value="${esc(profile.display_name || "")}" /></div>
+      <div class="field"><label>Bio</label><textarea data-profile-field="bio" placeholder="Training focus, goals, or coaching notes">${esc(profile.bio || "")}</textarea></div>
+      <button class="btn btn-primary section-gap" style="width:100%" data-action="save-profile">Save Profile</button>
+      ${state.profileStatus ? `<div class="admin-note">${esc(state.profileStatus)}</div>` : ""}
+    </section>
+    ${canAdmin ? `<section class="profile-admin-entry section-gap">
+      <div><div class="eyebrow">Private Management</div><div class="card-title">Admin Workspace</div><p>Players, access, activity, plans, roles, and permissions.</p></div>
+      <button class="btn btn-primary" data-action="open-admin-workspace">Open</button>
+    </section>` : ""}
+    <section class="form-card section-gap">
+      <div class="card-title">Appearance</div>
+      <div class="segmented"><button class="${state.theme === "dark" ? "active" : ""}" data-theme-set="dark">Dark</button><button class="${state.theme === "light" ? "active" : ""}" data-theme-set="light">Light</button><button data-action="reset-demo">Reset Logs</button></div>
+    </section>
+    <section class="form-card section-gap">
+      <div class="card-title">Data & Account</div>
       <div class="grid-2 section-gap">
         <button class="btn btn-secondary" data-action="export-backup">Export Backup</button>
         <button class="btn btn-secondary" data-action="cloud-backup-now">Cloud Backup</button>
       </div>
-      <div class="field">
-        <label>Import Backup JSON</label>
-        <input class="input" type="file" accept="application/json" data-import-backup />
-      </div>
-      ${isAdmin() ? `<div class="section-gap card metric-card" style="box-shadow:none"><div class="eyebrow">Admin</div><div class="metric-sub">Admin role active. User management requires Supabase RLS plus Edge Function/backend for safe invites and role updates.</div></div>` : ""}
+      <div class="field"><label>Import Backup JSON</label><input class="input" type="file" accept="application/json" data-import-backup /></div>
       <button class="btn btn-danger section-gap" style="width:100%" data-action="logout">Logout</button>
     </section>`;
+}
+function AdminScreen() {
+  return `${Header("Admin Workspace", "Owner command center", `<button class="btn btn-secondary" data-nav="profile" style="min-height:40px">Profile</button>`)}
+    <section class="admin-screen-intro">
+      <div><div class="eyebrow">Secure Management</div><div class="command-title">Players & Access</div><p class="command-copy">Each player has an isolated identity, athlete profile, plan, activity history, and database access boundary.</p></div>
+      <span class="admin-status">Private</span>
+    </section>
+    ${AdminPanel()}`;
+}
+function TrendBars(items, mode) {
+  const values = items.map((item) => Number(item.value || 0)).filter(Number.isFinite);
+  const max = Math.max(...values, 1);
+  const min = mode === "weight" ? Math.min(...values) : 0;
+  const range = Math.max(max - min, mode === "weight" ? 1 : max);
+  return `<div class="trend-chart ${items.length === 1 ? "single" : ""}" style="--trend-count:${Math.max(2, Math.min(8, items.length))}">
+    ${items.map((item) => {
+      const normalized = mode === "weight" ? (item.value - min) / range : item.value / max;
+      const height = Math.round(22 + Math.max(0, Math.min(1, normalized)) * 66);
+      return `<div class="trend-column" title="${esc(item.title || item.label)}">
+        <div class="trend-value">${mode === "weight" ? Number(item.value).toFixed(1) : Math.round(item.value).toLocaleString("en-US")}</div>
+        <div class="trend-track"><span style="--trend-height:${height}%"></span></div>
+        <div class="trend-label">${esc(item.label)}</div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+function VolumeLineChart(items) {
+  const width = 640;
+  const height = 210;
+  const plot = { left: 34, right: 18, top: 24, bottom: 42 };
+  const values = items.map((item) => Number(item.totalVolume || 0));
+  const max = Math.max(...values, 1);
+  const usableWidth = width - plot.left - plot.right;
+  const usableHeight = height - plot.top - plot.bottom;
+  const points = items.map((item, index) => {
+    const x = items.length === 1 ? width / 2 : plot.left + (index / (items.length - 1)) * usableWidth;
+    const y = plot.top + usableHeight - (Number(item.totalVolume || 0) / max) * usableHeight;
+    return { ...item, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+  });
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const area = points.length > 1 ? `${plot.left},${height - plot.bottom} ${polyline} ${points.at(-1).x},${height - plot.bottom}` : "";
+  return `<div class="line-chart-shell">
+    <svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(state.strengthPeriod)} strength volume trend">
+      <defs>
+        <linearGradient id="strengthArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".25"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient>
+      </defs>
+      ${[0, .5, 1].map((ratio) => `<line class="chart-grid-line" x1="${plot.left}" x2="${width - plot.right}" y1="${plot.top + usableHeight * ratio}" y2="${plot.top + usableHeight * ratio}" />`).join("")}
+      ${area ? `<polygon class="chart-area" points="${area}" />` : ""}
+      ${points.length > 1 ? `<polyline class="chart-line" points="${polyline}" />` : ""}
+      ${points.map((point) => `<g class="chart-point"><circle cx="${point.x}" cy="${point.y}" r="5"/><text class="chart-value" x="${point.x}" y="${Math.max(14, point.y - 12)}" text-anchor="middle">${compactKg(point.totalVolume)}</text><text class="chart-label" x="${point.x}" y="${height - 14}" text-anchor="middle">${esc(point.label)}</text><title>${esc(`${point.label}: ${kg(point.totalVolume)} · ${point.title}`)}</title></g>`).join("")}
+    </svg>
+  </div>`;
+}
+function compactKg(value) {
+  const amount = Number(value || 0);
+  return amount >= 1000 ? `${(amount / 1000).toFixed(amount >= 10000 ? 0 : 1)}k` : `${Math.round(amount)}`;
 }
 function AdminPanel() {
   const currentEmail = state.auth.profile?.email || state.auth.user?.email || "Signed-in user";
@@ -1061,14 +1200,20 @@ function AdminPlayerCommandCenter() {
       <button class="mini-btn" data-action="admin-refresh-directory">Refresh</button>
     </div>
     ${state.adminLoadStatus ? `<div class="admin-note">${esc(state.adminLoadStatus)}</div>` : `<div class="admin-note">Load the secure player directory to review each athlete and manage a separate plan.</div>`}
-    ${canShow ? `<div class="field section-gap">
-      <label>Select Player</label>
-      <select class="input" data-admin-athlete-select>
-        ${state.adminAthletes.map((item) => `<option value="${item.id}" ${item.id === athlete?.id ? "selected" : ""}>${esc(item.display_name)} · ${esc(item.status || "active")}</option>`).join("")}
-      </select>
+    ${canShow ? `<div class="player-directory section-gap">
+      ${state.adminAthletes.map((item) => {
+        const itemAssignment = item.users?.find((entry) => entry.relationship_type === "self") || item.users?.[0];
+        const itemUser = itemAssignment?.user;
+        return `<button class="player-directory-card ${item.id === athlete?.id ? "active" : ""}" data-admin-athlete="${item.id}">
+          ${Avatar(itemUser || { display_name: item.display_name }, "profile-avatar player-list-avatar")}
+          <span><strong>${esc(item.display_name)}</strong><small>${esc(itemUser?.email || "Athlete profile")}</small></span>
+          <em>${esc(roleLabel(itemUser?.role || ROLES.ATHLETE))}</em>
+        </button>`;
+      }).join("")}
     </div>
     <div class="player-profile-card">
-      <div>
+      ${Avatar(user || { display_name: athlete?.display_name }, "profile-avatar player-detail-avatar")}
+      <div class="player-profile-copy">
         <div class="eyebrow">Selected Athlete</div>
         <strong>${esc(athlete?.display_name || "No athlete selected")}</strong>
         <div class="day-meta">${user ? `${esc(user.email)} · ${roleLabel(user.role)}` : "No assigned user visible"}</div>
@@ -1214,7 +1359,7 @@ function AdminChecklist(label, done) {
 function BottomNav() {
   const items = [["home","Home","home"],["plan","Plan","plan"],["logs","Logs","logs"],["nutrition","Nutrition","nutrition"],["progress","Progress","progress"]];
   if (state.auth.loading || !state.auth.user) return "";
-  if (state.screen === "active") return "";
+  if (state.screen === "active" || state.screen === "admin") return "";
   return `<nav class="bottom-nav" aria-label="Primary navigation">${items.map(([id, label, ico]) => {
     const active = state.screen === id;
     const mark = id === "home" ? brandGlyph(active ? "nav-signature active" : "nav-signature") : icon(ico);
@@ -1234,6 +1379,39 @@ function Modal() {
       </div>
     </div>
   </div>`;
+}
+function openActivityModal(date = todayStr(), preferredType = "padel") {
+  const planned = state.plan.days.find((day) => day.day === dayName(date));
+  const defaultTime = preferredType === "padel" && planned?.hasPadel ? planned.padelTime || "" : "";
+  const defaultDuration = preferredType === "padel" && planned?.hasPadel ? planned.padelDuration || 90 : preferredType === "swimming" ? 30 : 60;
+  state.modal = {
+    title: "Add activity",
+    bodyHtml: `<div class="activity-modal-form">
+      <div class="field"><label>Date</label><input class="input" type="date" data-activity-field="date" value="${esc(date)}" /></div>
+      <div class="field"><label>Activity</label><select class="input" data-activity-field="type"><option value="padel" ${preferredType === "padel" ? "selected" : ""}>Padel</option><option value="swimming" ${preferredType === "swimming" ? "selected" : ""}>Swimming</option></select></div>
+      <div class="grid-2">
+        <div class="field"><label>Time</label><input class="input" type="time" data-activity-field="time" value="${toTimeInput(defaultTime)}" /></div>
+        <div class="field"><label>Duration (min)</label><input class="input" type="number" min="1" step="5" data-activity-field="duration" value="${defaultDuration}" /></div>
+      </div>
+      <div class="field"><label>Intensity</label><select class="input" data-activity-field="intensity"><option value="easy">Easy</option><option value="moderate" selected>Moderate</option><option value="hard">Hard</option></select></div>
+      <div class="field"><label>Notes</label><textarea data-activity-field="notes" placeholder="Optional session notes"></textarea></div>
+    </div>`,
+    cancelLabel: "Cancel",
+    confirmLabel: "Save Activity",
+    cancelAction: "close",
+    confirmAction: "save-activity"
+  };
+  render();
+}
+function toTimeInput(value = "") {
+  const match = String(value).match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return /^\d{2}:\d{2}$/.test(value) ? value : "";
+  let hour = Number(match[1]);
+  const minute = match[2];
+  const period = match[3]?.toUpperCase();
+  if (period === "PM" && hour < 12) hour += 12;
+  if (period === "AM" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${minute}`;
 }
 function confirmCancel() {
   state.modal = {
@@ -1262,12 +1440,24 @@ function bind() {
   document.querySelectorAll("[data-nav]").forEach((el) => el.addEventListener("click", () => setScreen(el.dataset.nav)));
   document.querySelectorAll("[data-day]").forEach((el) => el.addEventListener("click", () => { state.selectedDay = Number(el.dataset.day); state.screen = "plan"; render(); }));
   document.querySelectorAll("[data-quick]").forEach((el) => el.addEventListener("click", () => {
-    if (el.dataset.quick === "padel") togglePadel();
+    if (el.dataset.quick === "activity") openActivityModal(todayStr(), todayPlan().hasPadel ? "padel" : "swimming");
+    else if (el.dataset.quick === "padel") togglePadel();
     else setScreen(el.dataset.quick);
   }));
   document.querySelectorAll("[data-action]").forEach((el) => el.addEventListener("click", () => handleAction(el.dataset.action)));
+  document.querySelectorAll("[data-strength-period]").forEach((el) => el.addEventListener("click", () => {
+    state.strengthPeriod = el.dataset.strengthPeriod;
+    write("mm-strength-period", state.strengthPeriod);
+    render();
+  }));
   document.querySelectorAll("[data-history-date]").forEach((el) => el.addEventListener("click", () => {
     state.historySelectedDate = el.dataset.historyDate;
+    render();
+  }));
+  document.querySelectorAll("[data-remove-activity]").forEach((el) => el.addEventListener("click", () => {
+    state.activityLogs = removeActivity(state.activityLogs, el.dataset.activityDate, el.dataset.removeActivity);
+    saveAll();
+    toast("Activity removed");
     render();
   }));
   document.querySelectorAll("[data-import-backup]").forEach((el) => el.addEventListener("change", async () => {
@@ -1379,6 +1569,28 @@ function bind() {
       render();
     }
   }));
+  document.querySelectorAll("[data-admin-athlete]").forEach((el) => el.addEventListener("click", async () => {
+    try {
+      await loadAdminPlayer(el.dataset.adminAthlete);
+    } catch (error) {
+      state.adminPlanStatus = error.message || "Could not load selected player.";
+      render();
+    }
+  }));
+  document.querySelectorAll("[data-profile-avatar]").forEach((el) => el.addEventListener("change", async () => {
+    const file = el.files?.[0];
+    if (!file) return;
+    state.profileStatus = "Uploading profile picture...";
+    render();
+    try {
+      const uploaded = await uploadOwnAvatar(currentUserId(), file, state.auth.profile?.avatar_path || "");
+      state.auth.profile = { ...state.auth.profile, avatar_path: uploaded.path, avatar_url: uploaded.url };
+      state.profileStatus = "Profile picture updated.";
+    } catch (error) {
+      state.profileStatus = error.message || "Could not upload profile picture.";
+    }
+    render();
+  }));
   document.querySelectorAll("[data-admin-plan-day]").forEach((el) => el.addEventListener("click", () => {
     state.adminPlanDay = Number(el.dataset.adminPlanDay);
     render();
@@ -1466,6 +1678,37 @@ async function handleAction(action) {
     }
     render();
   }
+  if (action === "open-admin-workspace") {
+    if (!canOpenAdminPanel(state.auth.profile)) return toast("Admin access required");
+    state.screen = "admin";
+    if (!state.adminAthletes.length) {
+      await loadAdminCommandCenter();
+      return;
+    }
+    render();
+  }
+  if (action === "profile-back") {
+    setScreen("home");
+  }
+  if (action === "save-profile") {
+    const displayName = document.querySelector("[data-profile-field='display_name']")?.value || "";
+    const bio = document.querySelector("[data-profile-field='bio']")?.value || "";
+    state.profileStatus = "Saving profile...";
+    render();
+    try {
+      const profile = await updateOwnProfile(currentUserId(), { display_name: displayName, bio });
+      state.auth.profile = {
+        ...state.auth.profile,
+        ...profile,
+        role: profile.roles?.name || state.auth.profile?.role,
+        avatar_url: await signedAvatarUrl(profile.avatar_path)
+      };
+      state.profileStatus = "Profile saved.";
+    } catch (error) {
+      state.profileStatus = error.message || "Could not save profile.";
+    }
+    render();
+  }
   if (action === "admin-refresh-directory") {
     await loadAdminCommandCenter();
   }
@@ -1518,6 +1761,7 @@ async function handleAction(action) {
   if (action === "go-logs") setScreen("logs");
   if (action === "go-progress") setScreen("progress");
   if (action === "history-today") { state.historySelectedDate = todayStr(); render(); }
+  if (action === "add-activity") openActivityModal(state.historySelectedDate || todayStr(), "padel");
   if (action === "toggle-padel") togglePadel();
   if (action === "pause-workout") pauseWorkout();
   if (action === "resume-workout") resumeWorkout();
@@ -1528,6 +1772,7 @@ async function handleAction(action) {
     localRemove("mm-workout-logs");
     localRemove("mm-nutrition-logs");
     localRemove("mm-padel-logs");
+    localRemove("mm-activity-logs");
     location.reload();
   }
 }
@@ -1572,12 +1817,7 @@ async function createAdminUser() {
 function togglePadel() {
   const today = todayStr();
   const d = todayPlan();
-  if (!d.hasPadel) return toast("No padel scheduled today");
-  const done = !!state.padelLogs[today]?.completed;
-  state.padelLogs[today] = { completed: !done, duration: d.padelDuration || 90, date: today };
-  saveAll();
-  toast(!done ? "Padel marked complete" : "Padel unchecked");
-  render();
+  openActivityModal(today, "padel");
 }
 function handleModal(action) {
   if (action === "close") {
@@ -1633,6 +1873,21 @@ function handleModal(action) {
     state.modal = null;
     state.lastWorkoutSummary = null;
     state.screen = "progress";
+    render();
+  }
+  if (action === "save-activity") {
+    const date = document.querySelector("[data-activity-field='date']")?.value || todayStr();
+    const type = document.querySelector("[data-activity-field='type']")?.value || "padel";
+    const time = document.querySelector("[data-activity-field='time']")?.value || "";
+    const duration = Number(document.querySelector("[data-activity-field='duration']")?.value || 0);
+    const intensity = document.querySelector("[data-activity-field='intensity']")?.value || "moderate";
+    const notes = document.querySelector("[data-activity-field='notes']")?.value || "";
+    if (!date || duration <= 0) return toast("Add a date and duration");
+    state.activityLogs = addActivity(state.activityLogs, { date, type, time, duration, intensity, notes, completed: true });
+    state.historySelectedDate = date;
+    state.modal = null;
+    saveAll();
+    toast(`${activityLabel(type)} saved`);
     render();
   }
 }
@@ -1739,7 +1994,7 @@ async function boot() {
 boot();
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  navigator.serviceWorker.register("./sw.js").then((registration) => {
+  navigator.serviceWorker.register("./sw.js", { scope: "/", updateViaCache: "none" }).then((registration) => {
     registration.update().catch(() => {});
     if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
   }).catch(() => {});

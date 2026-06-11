@@ -256,6 +256,51 @@ function workoutEntries(workoutLogs = {}) {
     .sort(([a], [b]) => a.localeCompare(b));
 }
 
+function utcDate(date) {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function weekStart(date) {
+  const parsed = utcDate(date);
+  if (!parsed) return date;
+  parsed.setUTCDate(parsed.getUTCDate() - parsed.getUTCDay());
+  return parsed.toISOString().slice(0, 10);
+}
+
+function trendLabel(key, period) {
+  const parsed = utcDate(period === "monthly" ? `${key}-01` : key);
+  if (!parsed) return key;
+  if (period === "monthly") return parsed.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  if (period === "weekly") return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+export function aggregateVolumeTrend(sessions = [], period = "daily") {
+  const safePeriod = ["daily", "weekly", "monthly"].includes(period) ? period : "daily";
+  const grouped = new Map();
+  for (const session of sessions) {
+    const date = session?.date;
+    const volume = Number(session?.totalVolume || 0);
+    if (!date || !Number.isFinite(volume) || volume <= 0) continue;
+    const key = safePeriod === "monthly" ? date.slice(0, 7) : safePeriod === "weekly" ? weekStart(date) : date;
+    const current = grouped.get(key) || { key, totalVolume: 0, sessions: 0, workoutNames: [] };
+    current.totalVolume = round(current.totalVolume + volume, 1);
+    current.sessions += 1;
+    if (session.workoutName) current.workoutNames.push(session.workoutName);
+    grouped.set(key, current);
+  }
+  const limit = safePeriod === "daily" ? 14 : 12;
+  return Array.from(grouped.values())
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .slice(-limit)
+    .map((item) => ({
+      ...item,
+      label: trendLabel(item.key, safePeriod),
+      title: `${item.sessions} session${item.sessions === 1 ? "" : "s"}`
+    }));
+}
+
 export function exerciseHistory(exerciseName, workoutLogs = {}, plan, options = {}) {
   const beforeDate = options.beforeDate || null;
   const history = [];

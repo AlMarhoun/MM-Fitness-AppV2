@@ -1,6 +1,6 @@
 # MM Fitness App V2
 
-Premium mobile-first PWA for MM Fitness App alpha.
+Premium mobile-first PWA and private athlete command center with Supabase authentication, cloud sync, workout performance tracking, player management, and offline-safe active workout drafts.
 
 ## Deployment
 
@@ -26,8 +26,20 @@ The app is a static PWA using:
 
 ```bash
 npm run check
+npm run test:performance-trend
+npm run test:activities
 npm run validate:manifest
+npm run validate:pwa
+npm run validate:security
 ```
+
+Run locally:
+
+```bash
+python3 -m http.server 4311 --bind 127.0.0.1
+```
+
+Then open `http://127.0.0.1:4311/?v=19`.
 
 ## Supabase
 
@@ -44,10 +56,18 @@ Never commit:
 - admin password
 - private access tokens
 
-Cloud login/sync requires the Supabase schema and RLS migrations from the original build package to be applied before production testing.
+Supabase SQL migrations are stored in `supabase/migrations/`. The secure user-creation function is stored in `supabase/functions/create-user/`.
 
 ## PWA Notes
 
-- Cache version: `mm-fitness-app-v11-upload-ready`
-- Open with `?splash=1&v=11` after deployment to force the latest visual pass.
+- Cache version: `mm-fitness-app-v19-daily-activities`
+- Open with `?splash=1&v=19` after deployment to force the latest visual pass.
 - If iPhone keeps an old icon/app, remove the old home-screen app and add it again after opening the new Vercel URL.
+
+## Repository Notes
+
+- `src/`: application logic and UI.
+- `assets/`: only assets referenced by the app, manifest, or service worker.
+- `tests/`: performance and activity regression tests.
+- `supabase/migrations/`: database schema, permissions, RLS, and profile/avatar migrations.
+- Root markdown files: security, QA, PWA, migration, and implementation handoff records.

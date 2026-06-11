@@ -1,14 +1,14 @@
-const CACHE_NAME = "mm-fitness-app-v15-network-first-src";
+const CACHE_NAME = "mm-fitness-app-v19-daily-activities";
 const ASSETS = [
-  "./",
-  "./index.html",
   "./manifest.json",
-  "./src/styles.css?v=15",
-  "./src/app.js?v=15",
-  "./src/history.js",
-  "./src/performance.js",
+  "./src/styles.css?v=19",
+  "./src/app.js?v=19",
+  "./src/activities.js?v=19",
+  "./src/history.js?v=19",
+  "./src/performance.js?v=18",
   "./src/roles.js",
   "./src/permissions.js",
+  "./src/profile.js",
   "./src/adminData.js",
   "./src/sync.js",
   "./src/supabase.js",
@@ -27,7 +27,18 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(ASSETS.map(async (asset) => {
+        try {
+          const response = await fetch(asset, { cache: "reload" });
+          if (response.ok && !response.redirected) await cache.put(asset, response);
+        } catch {
+          // A single optional asset must not prevent the service worker from installing.
+        }
+      }))
+    )
+  );
   self.skipWaiting();
 });
 
@@ -47,16 +58,20 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  if (url.origin !== location.origin) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
+  if (url.origin !== location.origin) return;
+
+  // Let Safari handle page navigation directly. Vercel redirects /index.html to /,
+  // and iOS rejects redirected navigation responses served by a service worker.
+  if (event.request.mode === "navigate") return;
+
   if (url.pathname.includes("/src/")) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          if (response.ok && !response.redirected) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
           return response;
         })
         .catch(() => caches.match(event.request))
@@ -65,7 +80,13 @@ self.addEventListener("fetch", (event) => {
   }
   event.respondWith(
     caches.match(event.request).then((cached) =>
-      cached || fetch(event.request).catch(() => caches.match("./index.html"))
+      cached || fetch(event.request).then((response) => {
+        if (response.ok && !response.redirected) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
     )
   );
 });

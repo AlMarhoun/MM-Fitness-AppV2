@@ -1,6 +1,7 @@
 import { supabase } from "./supabase.js";
 import { getOrCreateAthlete, getProfile, upsertDefaultProfile } from "./db.js";
 import { canOpenAdminPanel } from "./roles.js";
+import { signedAvatarUrl } from "./profile.js";
 
 export const authState = {
   loading: true,
@@ -22,6 +23,7 @@ async function hydrateSession(session) {
   try {
     let profile = await getProfile(user.id);
     if (!profile) profile = await upsertDefaultProfile(user);
+    profile.avatar_url = await signedAvatarUrl(profile.avatar_path);
     const athlete = await getOrCreateAthlete(user, profile);
     authState.profile = profile;
     authState.athlete = athlete;

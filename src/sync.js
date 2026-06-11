@@ -154,6 +154,7 @@ export function cloudDatasetToSnapshot(dataset, fallback = {}) {
       "mm-workout-logs": workoutLogsFromRows(dataset.workoutSessions),
       "mm-nutrition-logs": nutritionLogs,
       "mm-padel-logs": padelLogs,
+      "mm-activity-logs": settings.activity_logs || fallback.data?.["mm-activity-logs"] || {},
       "mm-plan": plan,
       "mm-active-workout": fallback.data?.["mm-active-workout"] || null,
       "mm-session-ui": fallback.data?.["mm-session-ui"] || null
@@ -382,6 +383,16 @@ export async function syncSnapshotToCloud(athleteId, userId, snapshot) {
       setting_value: data["mm-theme"] || "dark"
     }, { onConflict: "athlete_id,user_id,setting_key" });
   if (themeError) throw themeError;
+
+  const { error: activityError } = await supabase
+    .from("app_settings")
+    .upsert({
+      athlete_id: athleteId,
+      user_id: userId,
+      setting_key: "activity_logs",
+      setting_value: data["mm-activity-logs"] || {}
+    }, { onConflict: "athlete_id,user_id,setting_key" });
+  if (activityError) throw activityError;
 
   return { planId };
 }

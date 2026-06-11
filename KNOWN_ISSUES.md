@@ -1,9 +1,17 @@
 # Known Issues
 
+## Pending Device Validation: iOS PWA Redirect Fix
+
+- Code fix completed on June 11, 2026.
+- The manifest no longer launches `/index.html`.
+- The service worker no longer caches or serves redirected navigation responses.
+- The fix still requires deployment to Vercel and a physical iPhone Add to Home Screen retest.
+- iPhones that stored the previous broken service worker may need the existing Home Screen icon and site data removed once before reinstalling.
+
 ## Cloud Database Upgrade
 
-- Supabase SQL migrations must be applied manually before normalized cloud storage works.
-- RLS policies are written but still require live Supabase testing.
+- Supabase migrations 001-005 are applied to the linked project.
+- RLS still requires live cross-role testing with separate owner, admin, athlete, and viewer accounts.
 - Edge Functions for invite/user creation/role changes/permission updates/deactivation/athlete assignment are planned but not implemented.
 - Existing localStorage data is not deleted automatically; user should export backup before migration.
 - Active workout remains local-first by design until finished/synced.
@@ -33,3 +41,10 @@ No known syntax-level issues after Phase 1 verification.
 - Real invites, role changes, deactivation, and athlete assignment require Supabase Edge Function or backend.
 - Supabase Auth must be configured as invite-only / public signup disabled in the Supabase project.
 - Live RLS testing is still required for owner/admin/athlete/viewer behavior.
+
+## Profile and Admin Workspace Upgrade
+
+- Private avatar upload is implemented, but camera-library selection and HEIC upload still need physical iPhone validation.
+- Signed avatar URLs are refreshed when profile/admin data reloads; a continuously open session may need a screen refresh after URL expiry.
+- Remaining privileged actions such as changing roles and deactivation stay disabled until their dedicated secure Edge Functions are deployed.
+- No production deployment was performed as part of this local upgrade.
