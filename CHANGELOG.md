@@ -267,3 +267,26 @@ Not changed:
 - No Documents folder transfer.
 - No new product feature phase started.
 - No feature or UI behavior changes during preview package preparation.
+# Performance Instrument V3 - Phase A/B
+
+- Added the V3 design elevation plan, design audit, and design system.
+- Elevated Home into a mission-first athlete command center.
+- Added compact Fuel, Recovery, and Body instruments.
+- Elevated Active Workout with a compact HUD, current exercise, active set, larger inputs, and fixed Finish dock.
+- Added reduced-motion support and restrained interaction feedback.
+- Added V3 UI contract testing.
+- Bumped static asset and service-worker cache version to V20.
+
+## Performance Instrument V3 - Phase C
+
+- Rebuilt Progress as a premium Performance Cockpit.
+- Added a tested presentation model in `src/progressCockpit.js`.
+- Added primary performance insight and next-focus guidance based only on available data.
+- Added latest, weekly, and monthly volume intelligence with comparison state.
+- Added ranked top-three estimated 1RM leaderboard with latest-versus-best context.
+- Added PR timeline data with old/new values when available.
+- Added weekly/monthly consistency, padel, swimming, nutrition, body direction, and optional recovery pattern.
+- Added premium no-data and partial-data states.
+- Reduced chart label density and removed misleading one-point trend rendering.
+- Added Progress model and snapshot-fallback tests.
+- Bumped static asset and service-worker cache version to V21.

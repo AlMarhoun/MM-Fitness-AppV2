@@ -1,11 +1,12 @@
-const CACHE_NAME = "mm-fitness-app-v19-daily-activities";
+const CACHE_NAME = "mm-fitness-app-v21-progress-cockpit";
 const ASSETS = [
   "./manifest.json",
-  "./src/styles.css?v=19",
-  "./src/app.js?v=19",
+  "./src/styles.css?v=21",
+  "./src/app.js?v=21",
   "./src/activities.js?v=19",
   "./src/history.js?v=19",
   "./src/performance.js?v=18",
+  "./src/progressCockpit.js?v=21",
   "./src/roles.js",
   "./src/permissions.js",
   "./src/profile.js",

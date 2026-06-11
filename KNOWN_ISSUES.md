@@ -48,3 +48,15 @@ No known syntax-level issues after Phase 1 verification.
 - Signed avatar URLs are refreshed when profile/admin data reloads; a continuously open session may need a screen refresh after URL expiry.
 - Remaining privileged actions such as changing roles and deactivation stay disabled until their dedicated secure Edge Functions are deployed.
 - No production deployment was performed as part of this local upgrade.
+# Performance Instrument V3 Pending Validation
+
+- Phase A/B require physical iPhone Add to Home Screen visual validation, especially safe-area spacing around the fixed Finish Workout dock.
+- Existing pending real-device lock/unlock validation remains open; browser reload restoration passed but is not a substitute for an iOS lifecycle test.
+- History, Nutrition, Logs, Profile, Admin, and Navigation still use the pre-V3 structure until their approved phases are implemented.
+
+## Phase C Notes
+
+- Progress is now V3. History, Nutrition, Logs, Profile, Admin, and Navigation remain on their earlier structure.
+- The current live account did not contain a recent PR, so the PR-rich visual timeline was verified through deterministic model tests rather than a live rendered PR record.
+- Strength leaderboard candidates inherit the existing `summarizeProgress` behavior, which seeds exercise names from the current plan. Historical exercises removed from the plan can remain available in History but may not appear in the top leaderboard.
+- Physical iPhone Add to Home Screen visual validation remains pending.

@@ -3,6 +3,7 @@ import { loadAdminAthleteSnapshot, loadAdminDirectory, summarizeAthleteSnapshot 
 import { activitiesForDate, activityCount, activityLabel, addActivity, removeActivity } from "./activities.js?v=19";
 import { dayHistory, monthCalendar } from "./history.js?v=19";
 import { aggregateVolumeTrend, createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js?v=18";
+import { buildProgressCockpitModel } from "./progressCockpit.js?v=21";
 import { ROLE_DEFINITIONS, ROLES, canOpenAdminPanel, isOwnerEmail, roleLabel } from "./roles.js";
 import { PERMISSIONS } from "./permissions.js";
 import { initials, signedAvatarUrl, updateOwnProfile, uploadOwnAvatar } from "./profile.js";
@@ -387,7 +388,8 @@ function icon(name) {
     spark: '<path d="m13 2-2 8h7l-8 12 2-9H5l8-11Z"/>',
     settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12h2m12 0h2M12 4v2m0 12v2m-5.6-2.4 1.4-1.4m8.4-8.4 1.4-1.4m0 11.2-1.4-1.4M7.8 7.8 6.4 6.4"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>',
-    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+    arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>'
   };
   return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.home}</svg>`;
 }
@@ -471,11 +473,9 @@ function HomeHeader() {
   return `<header class="home-head">
     <div>
       ${brandGlyph("home-signature")}
-      <div class="eyebrow" style="margin-top:12px">${fmtDate()} · Week ${weekNumber()} / 36</div>
-      <h1 class="h1">Mohammad</h1>
-      ${SyncBadge()}
+      <div class="home-identity"><span>${fmtDate()}</span><strong>Week ${weekNumber()} / 36</strong></div>
     </div>
-    <div class="home-head-actions">${ProfileAvatarButton()}<button class="readiness-orb" data-action="theme"><strong>${readinessScore()}</strong><span>Readiness</span></button></div>
+    <div class="home-head-actions">${SyncBadge()}${ProfileAvatarButton()}</div>
   </header>`;
 }
 function SyncBadge() {
@@ -492,70 +492,78 @@ function Home() {
   const weight = latestWeight();
   const next = getNextAction(d, wl, nl, log);
   const complete = wl?.completed;
+  const activities = activitiesForDate(state.activityLogs, today, state.padelLogs);
+  const activityLabel = activities.length
+    ? activities.map((activity) => activity.type === "swimming" ? "Swim" : "Padel").join(" + ")
+    : d.hasPadel ? `Padel ${d.padelTime}` : "No extra activity";
   return `${HomeHeader()}
-    <section class="command-card">
-      <div class="command-top">
-        <div class="eyebrow">Today's Workout</div>
-        <div class="command-title">${workoutName(d)}</div>
-        <p class="command-copy">${d.goal}</p>
-        <div class="chip-row">
-          <span class="chip">${d.duration ? d.duration + " min" : "Rest"}</span>
-          <span class="chip">${d.exercises.length} moves</span>
-          <span class="chip warning">${d.nutritionType} · ${d.calories}</span>
-          ${d.hasPadel ? `<span class="chip padel">Padel ${d.padelTime}</span>` : ""}
-          ${complete ? `<span class="chip" style="color:var(--success)">Workout done</span>` : ""}
-        </div>
-      </div>
-      <div class="command-actions">
-        <button class="btn btn-primary" data-action="${complete ? "view-plan-today" : "start-today"}">${complete ? "View Plan" : "Start Workout"}</button>
-        <button class="btn btn-secondary" data-action="view-plan-today">Plan</button>
-      </div>
-    </section>
-
-    <section class="card metric-card section-gap">
-      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+    <section class="mission-stage">
+      <div class="mission-stage-top">
         <div>
-          <div class="eyebrow" style="color:var(--warning)">Nutrition Target</div>
-          <div class="metric-value">${d.calories}<span style="font-size:12px;color:var(--muted);font-weight:800"> kcal</span></div>
-          <div class="metric-sub">${d.protein}P · ${d.carbs}C · ${d.fats}F</div>
+          <div class="eyebrow">Today's Mission</div>
+          <div class="mission-title">${workoutName(d)}</div>
         </div>
-        <div style="min-width:92px">
-          <div class="rail"><span style="--pct:${nl?.adhered ? 100 : 62}%;background:var(--warning)"></span></div>
-          <div class="metric-sub" style="text-align:right">${nl?.adhered ? "Logged" : d.nutritionType + " day"}</div>
-        </div>
+        <button class="mission-readiness" data-action="theme" aria-label="Readiness ${readinessScore()}. Change theme">
+          <span class="mission-readiness-ring" style="--readiness:${readinessScore()}"><strong>${readinessScore()}</strong></span>
+          <small>Ready</small>
+        </button>
+      </div>
+      <p class="mission-copy">${d.goal}</p>
+      <div class="mission-facts">
+        <div><span>Duration</span><strong>${d.duration ? d.duration + " min" : "Recovery"}</strong></div>
+        <div><span>Work</span><strong>${d.exercises.length} moves</strong></div>
+        <div><span>Activity</span><strong>${activityLabel}</strong></div>
+      </div>
+      <div class="mission-actions">
+        <button class="btn btn-primary mission-primary" data-action="${complete ? "view-plan-today" : "start-today"}">${complete ? "Review Session" : "Start Workout"}</button>
+        <button class="mission-plan-btn" data-action="view-plan-today" aria-label="View today's plan">${icon("arrow")}</button>
+      </div>
+      <div class="mission-status ${complete ? "complete" : ""}">
+        <span>${complete ? "Session completed" : next.label}</span>
+        <strong>${complete ? "Saved" : `${ws.workouts}/5 this week`}</strong>
       </div>
     </section>
 
-    <div class="grid-2 section-gap">
-      <section class="card metric-card">
-        <div class="eyebrow">Recovery</div>
-        <div class="metric-value">${recoveryLabel(log)}</div>
-        <div class="metric-sub">Sleep ${log.sleepScore || "—"}/5 · Energy ${log.energyScore || "—"}/5</div>
-      </section>
-      <section class="card metric-card">
-        <div class="eyebrow">Body</div>
-        <div class="metric-value">${weight ? weight.weight : "—"}<span style="font-size:12px;color:var(--muted);font-weight:800"> kg</span></div>
-        <div class="metric-sub">${weight ? `${(weight.weight - PLAN.startWeight).toFixed(1)} kg vs start` : "Log first weight"}</div>
-      </section>
-    </div>
-
-    <section class="card weekly-card section-gap home-tail">
-      <div style="display:flex;justify-content:space-between;align-items:center"><div class="card-title">Weekly Progress</div><button class="btn btn-ghost" style="min-height:34px;padding:0 12px" data-nav="progress">Details</button></div>
-      ${ProgressRow("Workouts", ws.workouts, 5, "var(--accent)")}
-      ${ProgressRow("Padel", ws.padel, 2, "var(--padel)")}
-      ${ProgressRow("Nutrition", ws.nutrition, 7, "var(--success)")}
+    <section class="mission-instruments section-gap" aria-label="Daily performance instruments">
+      <article class="instrument-metric nutrition">
+        <div class="instrument-label">Fuel</div>
+        <div class="instrument-value">${d.calories}<small>kcal</small></div>
+        <div class="instrument-detail">${nl?.adhered ? "Logged" : `${d.protein}P · ${d.carbs}C`}</div>
+      </article>
+      <article class="instrument-metric recovery">
+        <div class="instrument-label">Recovery</div>
+        <div class="instrument-value text">${recoveryLabel(log)}</div>
+        <div class="instrument-detail">Sleep ${log.sleepScore || "—"} · Energy ${log.energyScore || "—"}</div>
+      </article>
+      <article class="instrument-metric body">
+        <div class="instrument-label">Body</div>
+        <div class="instrument-value">${weight ? weight.weight : "—"}<small>kg</small></div>
+        <div class="instrument-detail">${weight ? `${(weight.weight - PLAN.startWeight).toFixed(1)} vs start` : "Log weight"}</div>
+      </article>
     </section>
 
-    <section class="card weekly-card section-gap">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px">
-        <div><div class="eyebrow">Next Action</div><div class="card-title" style="margin-top:5px">${next.label}</div></div>
-        <button class="btn btn-primary" style="min-height:42px;padding:0 14px" data-action="${next.action}">Open</button>
+    <section class="weekly-instrument section-gap">
+      <div class="instrument-section-head">
+        <div><div class="eyebrow">Weekly Signal</div><div class="card-title">Consistency</div></div>
+        <button class="instrument-link" data-nav="progress">View progress</button>
+      </div>
+      <div class="weekly-strip">
+        ${ProgressRow("Workouts", ws.workouts, 5, "var(--accent)")}
+        ${ProgressRow("Padel", ws.padel, 2, "var(--padel)")}
+        ${ProgressRow("Nutrition", ws.nutrition, 7, "var(--warning)")}
+      </div>
+    </section>
+
+    <section class="next-action-instrument section-gap home-tail">
+      <div class="instrument-section-head">
+        <div><div class="eyebrow">Next Best Action</div><div class="card-title">${next.label}</div></div>
+        <button class="btn btn-secondary next-action-btn" data-action="${next.action}">Open</button>
       </div>
       <div class="quick-grid">
         ${Quick("Log Weight", "weight", !!log.bodyWeight, "logs")}
         ${Quick("Nutrition", "nutrition", !!nl?.adhered, "nutrition")}
         ${Quick("Recovery", "moon", !!log.sleepScore, "logs")}
-        ${Quick("Activity", "play", activitiesForDate(state.activityLogs, today, state.padelLogs).length > 0, "activity")}
+        ${Quick("Activity", "play", activities.length > 0, "activity")}
       </div>
     </section>`;
 }
@@ -698,12 +706,13 @@ function ActiveWorkout() {
   const d = state.plan.days[aw.dayIndex];
   const totalSets = d.exercises.reduce((sum, ex) => sum + Number(ex.sets || 0), 0);
   const doneSets = Object.values(aw.sets || {}).filter((s) => s.done).length;
-  return `<section class="active-head">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-        <div><div class="eyebrow">${d.day}</div><div class="h1" style="font-size:24px">${workoutName(d)}</div></div>
-        <div style="text-align:right"><div class="timer">${formatElapsed(elapsed(aw))}</div><div class="day-meta">${doneSets}/${totalSets} sets</div></div>
+  return `<section class="active-workout-shell">
+    <section class="active-head workout-hud">
+      <div class="workout-hud-main">
+        <div><div class="eyebrow">Live Session · ${d.day}</div><div class="workout-hud-title">${workoutName(d)}</div></div>
+        <div class="workout-time"><div class="timer">${formatElapsed(elapsed(aw))}</div><div class="day-meta">${aw.paused ? "Paused" : "In progress"}</div></div>
       </div>
-      <div class="rail" style="margin-top:12px"><span style="--pct:${pct(doneSets,totalSets)}%"></span></div>
+      <div class="workout-progress-line"><div class="rail"><span style="--pct:${pct(doneSets,totalSets)}%"></span></div><strong>${doneSets}/${totalSets}</strong></div>
       <div class="active-mini-actions">
         ${aw.paused ? `<button class="btn btn-primary" data-action="resume-workout">Resume</button>` : `<button class="btn btn-secondary" data-action="pause-workout">Pause</button>`}
         <button class="btn btn-danger" data-action="cancel-workout">Cancel</button>
@@ -711,23 +720,32 @@ function ActiveWorkout() {
     </section>
     ${aw.paused ? `<div class="paused-banner">Workout paused. Timer stopped and your set data is preserved.</div>` : ""}
     <div class="panel-list">${d.exercises.map((ex, exIdx) => ActiveExercise(ex, exIdx)).join("")}</div>
-    <div class="workout-controls">
-      <button class="btn btn-primary" style="grid-column:1/-1" data-action="finish-workout">Finish Workout</button>
-    </div>`;
+    <div class="workout-finish-dock">
+      <div><span>Session progress</span><strong>${doneSets} of ${totalSets} sets</strong></div>
+      <button class="btn btn-primary" data-action="finish-workout">Finish Workout</button>
+    </div>
+  </section>`;
 }
 function ActiveExercise(ex, exIdx) {
   const performance = summarizeCurrentExercise(ex.name, exIdx, state.activeWorkout, state.workoutLogs, state.plan);
   const allDone = Array.from({ length: Number(ex.sets) }, (_, i) => state.activeWorkout.sets[`${exIdx}-${i}`]?.done).every(Boolean);
-  return `<article class="exercise-card" style="${allDone ? "border-color:color-mix(in srgb,var(--success) 32%,transparent)" : ""}">
-    <div style="display:flex;justify-content:space-between;gap:10px">
+  const firstIncompleteSet = Array.from({ length: Number(ex.sets) }, (_, i) => i).find((setIdx) => !state.activeWorkout.sets[`${exIdx}-${setIdx}`]?.done);
+  const isCurrentExercise = !allDone && state.plan.days[state.activeWorkout.dayIndex].exercises
+    .slice(0, exIdx)
+    .every((previousExercise, previousIndex) => Array.from({ length: Number(previousExercise.sets) }, (_, i) => state.activeWorkout.sets[`${previousIndex}-${i}`]?.done).every(Boolean));
+  return `<article class="exercise-card active-exercise-card ${allDone ? "exercise-complete" : ""} ${isCurrentExercise ? "current-exercise" : ""}">
+    <div class="active-exercise-head">
       <div>
+        <div class="exercise-order">Exercise ${exIdx + 1}</div>
         <div class="day-title">${allDone ? "✓ " : ""}${ex.name}</div>
         <div class="exercise-meta"><span>${ex.sets} × ${ex.reps}</span><span>${ex.intensity}</span>${ex.rest ? `<span>${ex.rest}s rest</span>` : ""}</div>
       </div>
+      ${isCurrentExercise ? `<span class="current-exercise-badge">Now</span>` : ""}
     </div>
     ${ex.notes ? `<div class="day-meta">${ex.notes}</div>` : ""}
     ${ExercisePerformanceCard(performance)}
-    ${Array.from({ length: Number(ex.sets) }, (_, setIdx) => SetRow(exIdx, setIdx)).join("")}
+    <div class="set-column-labels"><span>Set</span><span>Weight</span><span>Reps</span><span>Done</span></div>
+    ${Array.from({ length: Number(ex.sets) }, (_, setIdx) => SetRow(exIdx, setIdx, isCurrentExercise && setIdx === firstIncompleteSet)).join("")}
   </article>`;
 }
 function ExercisePerformanceCard(performance) {
@@ -749,14 +767,14 @@ function ExercisePerformanceCard(performance) {
     ${currentPrs.length ? `<span class="pr-badge">New PR</span>` : ""}
   </div>`;
 }
-function SetRow(exIdx, setIdx) {
+function SetRow(exIdx, setIdx, isActive = false) {
   const key = `${exIdx}-${setIdx}`;
   const s = state.activeWorkout.sets[key] || {};
-  return `<div class="set-row ${s.done ? "done" : ""}">
-    <strong class="day-meta">S${setIdx + 1}</strong>
-    <input class="input" inputmode="decimal" type="number" placeholder="kg" value="${s.weight || ""}" data-set="${key}" data-field="weight" />
-    <input class="input" inputmode="numeric" type="number" placeholder="reps" value="${s.reps || ""}" data-set="${key}" data-field="reps" />
-    <button class="check-btn ${s.done ? "done" : ""}" data-set-done="${key}">${s.done ? "✓" : "○"}</button>
+  return `<div class="set-row ${s.done ? "done" : ""} ${isActive ? "active-set" : ""}">
+    <strong class="set-number">${setIdx + 1}</strong>
+    <label class="set-input"><span>Weight</span><input class="input" inputmode="decimal" type="number" placeholder="kg" aria-label="Set ${setIdx + 1} weight" value="${s.weight || ""}" data-set="${key}" data-field="weight" /></label>
+    <label class="set-input"><span>Reps</span><input class="input" inputmode="numeric" type="number" placeholder="reps" aria-label="Set ${setIdx + 1} reps" value="${s.reps || ""}" data-set="${key}" data-field="reps" /></label>
+    <button class="check-btn ${s.done ? "done" : ""}" data-set-done="${key}" aria-label="${s.done ? "Mark set incomplete" : "Complete set"}">${s.done ? "✓" : "○"}</button>
   </div>`;
 }
 function elapsed(aw) {
@@ -950,62 +968,170 @@ function NutritionField(label, field, value) {
   return `<div class="field"><label>${label}</label><input class="input" type="number" data-nutrition="${field}" placeholder="0" value="${value || ""}" /></div>`;
 }
 function Progress() {
-  const ws = weekStats();
   const performance = summarizeProgress(state.workoutLogs, state.plan);
-  const weight = latestWeight();
-  const totalWorkouts = Object.values(state.workoutLogs).filter((w) => w.completed).length;
-  const totalPadel = activityCount(state.activityLogs, "padel", null, state.padelLogs);
-  const weights = Object.entries(state.logs).filter(([, v]) => v.bodyWeight).sort(([a], [b]) => a.localeCompare(b)).slice(-8);
   const strengthTrend = aggregateVolumeTrend(performance.sessions, state.strengthPeriod);
   const strengthPeriodTotal = strengthTrend.reduce((sum, item) => sum + item.totalVolume, 0);
-  return `${Header("Progress", "Performance review")}
-    <div class="grid-2">
-      <section class="card metric-card"><div class="eyebrow">Current Weight</div><div class="metric-value">${weight ? weight.weight : PLAN.startWeight}<span style="font-size:12px;color:var(--muted)"> kg</span></div><div class="metric-sub">Target ${PLAN.targetWeight} kg</div></section>
-      <section class="card metric-card"><div class="eyebrow">Plan Progress</div><div class="metric-value">${weekNumber()}<span style="font-size:12px;color:var(--muted)"> /36</span></div><div class="metric-sub">Foundation phase</div></section>
-      <section class="card metric-card"><div class="eyebrow">Workouts</div><div class="metric-value">${totalWorkouts}</div><div class="metric-sub">Completed sessions</div></section>
-      <section class="card metric-card"><div class="eyebrow">Padel</div><div class="metric-value">${totalPadel}</div><div class="metric-sub">Completed sessions</div></section>
+  const cockpit = buildProgressCockpitModel({
+    performance,
+    workoutLogs: state.workoutLogs,
+    dailyLogs: state.logs,
+    nutritionLogs: state.nutritionLogs,
+    activityLogs: state.activityLogs,
+    padelLogs: state.padelLogs,
+    nowDate: todayStr(),
+    startWeight: PLAN.startWeight,
+    targetWeight: PLAN.targetWeight,
+    planWeek: weekNumber(),
+    planWeeks: PLAN.weeks
+  });
+  return `${ProgressCockpit(cockpit)}
+    ${PrimaryInsightCard(cockpit)}
+    ${VolumeTrendCard(cockpit, strengthTrend, strengthPeriodTotal)}
+    ${StrengthLeaderboard(cockpit)}
+    ${PRTimeline(cockpit)}
+    ${ConsistencyStrip(cockpit)}
+    ${BodyMetricTrend(cockpit)}
+    ${RecoveryPatternCard(cockpit)}
+    <section class="next-focus-instrument section-gap">
+      <div><div class="eyebrow">Next Focus</div><div class="card-title">${esc(cockpit.nextFocus)}</div></div>
+      ${icon("arrow")}
+    </section>
+    <footer class="performance-cloud-status section-gap">
+      <div><strong>Cloud performance data</strong><span>${esc(state.auth.profile?.role || "athlete")} · ${esc((state.syncStatus || getSyncStatus()).detail)}</span></div>
+      ${SyncBadge()}
+    </footer>`;
+}
+function ProgressCockpit(cockpit) {
+  return `<section class="performance-cockpit">
+    <div class="cockpit-head">
+      <div><div class="eyebrow">Performance Cockpit</div><h1>Progress</h1></div>
+      ${ProfileAvatarButton()}
     </div>
-    <section class="card weekly-card section-gap">
-      <div class="card-title">This Week</div>
-      ${ProgressRow("Workouts", ws.workouts, 5, "var(--accent)")}
-      ${ProgressRow("Padel", ws.padel, 2, "var(--padel)")}
-      ${ProgressRow("Nutrition", ws.nutrition, 7, "var(--success)")}
-    </section>
-    <section class="card weekly-card section-gap">
-      <div class="card-title">Weight Trend</div>
-      ${weights.length > 1 ? TrendBars(weights.map(([date, v]) => ({ label: date.slice(5), value: Number(v.bodyWeight || 0) })), "weight") : `<div class="empty">Log two weight entries to reveal the trend.</div>`}
-    </section>
-    <section class="card weekly-card section-gap">
-      <div class="strength-chart-head">
-        <div>
-          <div class="card-title">Strength Progress</div>
-          <div class="metric-sub">${strengthTrend.length ? `${state.strengthPeriod[0].toUpperCase() + state.strengthPeriod.slice(1)} volume: ${kg(strengthPeriodTotal)}` : `Total logged volume: ${kg(performance.totalVolume)}`}</div>
-        </div>
-        <div class="segmented strength-period" aria-label="Strength progress period">
-          ${["daily", "weekly", "monthly"].map((period) => `<button class="${state.strengthPeriod === period ? "active" : ""}" data-strength-period="${period}">${period[0].toUpperCase() + period.slice(1)}</button>`).join("")}
-        </div>
+    <div class="cockpit-primary">
+      <div><span>Current weight</span><strong>${cockpit.body.latestWeight ?? "—"}${cockpit.body.latestWeight ? `<small>kg</small>` : ""}</strong></div>
+      <div class="cockpit-target"><span>Target</span><strong>${PLAN.targetWeight}<small>kg</small></strong></div>
+      <div class="cockpit-plan-ring" style="--plan-progress:${cockpit.planProgress}"><strong>${cockpit.planProgress}%</strong><span>Plan</span></div>
+    </div>
+    <div class="cockpit-instruments">
+      ${CockpitMetric("Consistency", `${cockpit.consistency.weeklyPercent}%`, `${cockpit.consistency.workouts}/5 workouts`)}
+      ${CockpitMetric("Latest volume", cockpit.latestWorkoutVolume ? compactKg(cockpit.latestWorkoutVolume) : "—", cockpit.latestWorkoutVolume ? "Last session" : "No weighted session")}
+      ${CockpitMetric("PR signal", cockpit.latestPrCount || "—", cockpit.latestPrCount ? "This week" : "No recent PR")}
+    </div>
+  </section>`;
+}
+function CockpitMetric(label, value, detail) {
+  return `<div class="cockpit-metric"><span>${label}</span><strong>${value}</strong><small>${detail}</small></div>`;
+}
+function PrimaryInsightCard(cockpit) {
+  return `<section class="primary-insight-card ${cockpit.insight.tone} section-gap">
+    <div class="insight-signal">${icon(cockpit.insight.tone === "positive" ? "spark" : "progress")}</div>
+    <div><div class="eyebrow">${esc(cockpit.insight.eyebrow)}</div><h2>${esc(cockpit.insight.title)}</h2><p>${esc(cockpit.insight.detail)}</p></div>
+  </section>`;
+}
+function MetricDeltaBadge(value) {
+  if (!Number.isFinite(value)) return `<span class="metric-delta neutral">No comparison</span>`;
+  const positive = value > 0;
+  return `<span class="metric-delta ${positive ? "positive" : value < 0 ? "negative" : "neutral"}">${positive ? "+" : ""}${value}% vs last</span>`;
+}
+function VolumeTrendCard(cockpit, strengthTrend, periodTotal) {
+  return `<section class="volume-intelligence performance-section section-gap">
+    <div class="performance-section-head">
+      <div><div class="eyebrow">Volume Intelligence</div><h2>Training output</h2></div>
+      ${MetricDeltaBadge(cockpit.volume.latestDeltaPercent)}
+    </div>
+    <div class="volume-metric-grid">
+      ${MiniChartCard("Latest", cockpit.volume.latest, "kg")}
+      ${MiniChartCard("This week", cockpit.volume.weekly, "kg")}
+      ${MiniChartCard("This month", cockpit.volume.monthly, "kg")}
+    </div>
+    <div class="chart-control-row">
+      <div><strong>${state.strengthPeriod[0].toUpperCase() + state.strengthPeriod.slice(1)} trend</strong><span>${strengthTrend.length ? kg(periodTotal) : "Complete a weighted session"}</span></div>
+      <div class="segmented strength-period" aria-label="Strength progress period">
+        ${["daily", "weekly", "monthly"].map((period) => `<button class="${state.strengthPeriod === period ? "active" : ""}" data-strength-period="${period}">${period[0].toUpperCase() + period.slice(1)}</button>`).join("")}
       </div>
-      ${strengthTrend.length ? VolumeLineChart(strengthTrend) : `<div class="empty">Finish a weighted workout to reveal volume trend.</div>`}
-    </section>
-    <section class="card weekly-card section-gap">
-      <div class="card-title">Best Estimated 1RM</div>
-      ${performance.bestByExercise.length ? performance.bestByExercise.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${kg(item.bestEstimatedOneRepMax)}</strong></div>`).join("") : `<div class="empty">No completed weighted sets yet.</div>`}
-    </section>
-    <section class="card weekly-card section-gap">
-      <div class="card-title">Recent PRs</div>
-      ${performance.prList.length ? performance.prList.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${esc(item.label)}</strong></div>`).join("") : `<div class="empty">PRs will appear after you beat a previous best.</div>`}
-    </section>
-    <section class="form-card section-gap">
-      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
-        <div>
-          <div class="card-title">Cloud Performance Data</div>
-          <div class="day-meta">${esc(state.auth.profile?.email || state.auth.user?.email || "")}</div>
-          <div class="day-meta">Role: ${esc(state.auth.profile?.role || "athlete")} · ${esc((state.syncStatus || getSyncStatus()).detail)}</div>
-        </div>
-        ${SyncBadge()}
-      </div>
-      <button class="btn btn-secondary section-gap" style="width:100%" data-nav="profile">Account & Settings</button>
-    </section>`;
+    </div>
+    ${strengthTrend.length > 1 ? VolumeLineChart(strengthTrend) : EmptyPerformanceState(strengthTrend.length ? "One more session builds the trend" : "No volume trend yet", strengthTrend.length ? "Complete another weighted workout to compare training output over time." : "Finish a weighted workout with completed sets to create the first data point.")}
+  </section>`;
+}
+function MiniChartCard(label, value, unit) {
+  return `<div class="mini-chart-card"><span>${label}</span><strong>${value ? compactKg(value) : "—"}</strong><small>${value ? unit : "Not enough data"}</small></div>`;
+}
+function StrengthLeaderboard(cockpit) {
+  return `<section class="strength-leaderboard performance-section section-gap">
+    <div class="performance-section-head"><div><div class="eyebrow">Strength / Estimated 1RM</div><h2>Strongest lifts</h2></div><span class="section-count">Top 3</span></div>
+    ${cockpit.strength.top.length ? `<div class="leaderboard-list">${cockpit.strength.top.map((item, index) => `<article class="leaderboard-row">
+      <span class="leaderboard-rank">${index + 1}</span>
+      <div><strong>${esc(item.exerciseName)}</strong><span>Latest ${item.latestEstimatedOneRepMax ? kg(item.latestEstimatedOneRepMax) : "Not enough data"}${item.latestWeight && item.latestReps ? ` · ${kg(item.latestWeight)} × ${item.latestReps}` : ""}</span></div>
+      <div class="leaderboard-best"><span>Best</span><strong>${kg(item.bestEstimatedOneRepMax)}</strong></div>
+    </article>`).join("")}</div>` : EmptyPerformanceState("No strength ranking yet", "Complete weighted sets with reps to calculate estimated 1RM and rank your strongest exercises.")}
+  </section>`;
+}
+function PRTimeline(cockpit) {
+  return `<section class="pr-timeline performance-section section-gap">
+    <div class="performance-section-head"><div><div class="eyebrow">Personal Records</div><h2>PR timeline</h2></div>${cockpit.prs.length ? `<span class="pr-count">${cockpit.prs.length}</span>` : ""}</div>
+    ${cockpit.prs.length ? `<div class="pr-feed">${cockpit.prs.slice(0, 6).map((pr) => `<article class="pr-feed-item">
+      <span class="pr-feed-marker">${icon("spark")}</span>
+      <div><strong>${esc(pr.exerciseName)}</strong><span>${esc(pr.typeLabel)} · ${esc(formatShortDate(pr.date))}</span></div>
+      <div class="pr-change">${pr.oldValue ? `<small>${formatPerformanceValue(pr.oldValue, pr.unit)}</small><span>→</span>` : ""}<strong>${pr.newValue ? formatPerformanceValue(pr.newValue, pr.unit) : esc(pr.label)}</strong></div>
+    </article>`).join("")}</div>` : EmptyPerformanceState("No personal records yet", "Beat a previous weight, rep, estimated 1RM, or volume best and it will appear here.")}
+  </section>`;
+}
+function ConsistencyStrip(cockpit) {
+  return `<section class="consistency-strip performance-section section-gap">
+    <div class="performance-section-head"><div><div class="eyebrow">Consistency</div><h2>Training rhythm</h2></div><strong class="consistency-score">${cockpit.consistency.weeklyPercent}%</strong></div>
+    <div class="consistency-grid">
+      ${ConsistencyMetric("Workouts", cockpit.consistency.workouts, "5 target", "accent")}
+      ${ConsistencyMetric("Padel", cockpit.consistency.padel, "this week", "padel")}
+      ${ConsistencyMetric("Swimming", cockpit.consistency.swimming, "this week", "ice")}
+      ${ConsistencyMetric("Nutrition", cockpit.consistency.nutrition, "7 days", "warning")}
+    </div>
+    <div class="monthly-consistency"><span>Monthly workout consistency</span><div class="rail"><span style="--pct:${cockpit.consistency.monthlyPercent}%"></span></div><strong>${cockpit.consistency.monthlyPercent}%</strong></div>
+  </section>`;
+}
+function ConsistencyMetric(label, value, detail, tone) {
+  return `<div class="consistency-metric ${tone}"><span>${label}</span><strong>${value}</strong><small>${detail}</small></div>`;
+}
+function BodyMetricTrend(cockpit) {
+  const body = cockpit.body;
+  return `<section class="body-metric-trend performance-section section-gap">
+    <div class="performance-section-head"><div><div class="eyebrow">Body Metrics</div><h2>Body direction</h2></div>${body.weightDelta !== null ? `<span class="metric-delta ${body.weightDelta <= 0 ? "positive" : "negative"}">${body.weightDelta > 0 ? "+" : ""}${body.weightDelta} kg latest</span>` : ""}</div>
+    ${body.hasData ? `<div class="body-trend-layout">
+      <div class="body-current"><span>Latest weight</span><strong>${body.latestWeight}<small>kg</small></strong><em>${body.targetDistance > 0 ? `${body.targetDistance} kg to target` : "Target reached"}</em></div>
+      <div class="body-support"><div><span>Waist</span><strong>${body.latestWaist ? `${body.latestWaist} cm` : "—"}</strong></div><div><span>From start</span><strong>${body.changeFromStart > 0 ? "+" : ""}${body.changeFromStart} kg</strong></div></div>
+      ${body.trend.length > 1 ? BodySparkline(body.trend) : `<div class="body-trend-note">Log one more weight entry to reveal direction.</div>`}
+    </div>` : EmptyPerformanceState("No body trend yet", "Log your weight in Daily Logs to start tracking distance to target.")}
+  </section>`;
+}
+function BodySparkline(items) {
+  const values = items.map((item) => item.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 1);
+  const points = items.map((item, index) => `${8 + (index / Math.max(1, items.length - 1)) * 284},${72 - ((item.value - min) / range) * 52}`).join(" ");
+  return `<svg class="body-sparkline" viewBox="0 0 300 84" role="img" aria-label="Recent body weight trend"><polyline points="${points}"/><circle cx="292" cy="${points.split(" ").at(-1).split(",")[1]}" r="5"/></svg>`;
+}
+function RecoveryPatternCard(cockpit) {
+  const recovery = cockpit.recovery;
+  if (!recovery.hasData) return "";
+  return `<section class="recovery-pattern performance-section section-gap">
+    <div class="performance-section-head"><div><div class="eyebrow">Recovery Pattern</div><h2>Seven-day average</h2></div><span class="section-count">/5</span></div>
+    <div class="recovery-grid">${RecoveryMetric("Sleep", recovery.sleep, false)}${RecoveryMetric("Energy", recovery.energy, false)}${RecoveryMetric("Soreness", recovery.soreness, true)}${RecoveryMetric("Achilles", recovery.achilles, true)}</div>
+  </section>`;
+}
+function RecoveryMetric(label, value, inverse) {
+  const pctValue = value ? Math.round((value / 5) * 100) : 0;
+  return `<div class="recovery-metric ${inverse ? "inverse" : ""}"><span>${label}</span><strong>${value ?? "—"}</strong><div class="rail"><span style="--pct:${pctValue}%"></span></div></div>`;
+}
+function EmptyPerformanceState(title, detail) {
+  return `<div class="empty-performance-state"><span>${icon("progress")}</span><div><strong>${esc(title)}</strong><p>${esc(detail)}</p></div></div>`;
+}
+function formatPerformanceValue(value, unit) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "Not enough data";
+  return `${number.toLocaleString("en-US", { maximumFractionDigits: 1 })}${unit === "reps" ? " reps" : " kg"}`;
+}
+function formatShortDate(date) {
+  return date ? dateFrom(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Date unavailable";
 }
 function ProfileScreen() {
   const profile = state.auth.profile || {};
@@ -1086,6 +1212,7 @@ function VolumeLineChart(items) {
   });
   const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
   const area = points.length > 1 ? `${plot.left},${height - plot.bottom} ${polyline} ${points.at(-1).x},${height - plot.bottom}` : "";
+  const labelStep = Math.max(1, Math.ceil(points.length / 4));
   return `<div class="line-chart-shell">
     <svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(state.strengthPeriod)} strength volume trend">
       <defs>
@@ -1094,7 +1221,7 @@ function VolumeLineChart(items) {
       ${[0, .5, 1].map((ratio) => `<line class="chart-grid-line" x1="${plot.left}" x2="${width - plot.right}" y1="${plot.top + usableHeight * ratio}" y2="${plot.top + usableHeight * ratio}" />`).join("")}
       ${area ? `<polygon class="chart-area" points="${area}" />` : ""}
       ${points.length > 1 ? `<polyline class="chart-line" points="${polyline}" />` : ""}
-      ${points.map((point) => `<g class="chart-point"><circle cx="${point.x}" cy="${point.y}" r="5"/><text class="chart-value" x="${point.x}" y="${Math.max(14, point.y - 12)}" text-anchor="middle">${compactKg(point.totalVolume)}</text><text class="chart-label" x="${point.x}" y="${height - 14}" text-anchor="middle">${esc(point.label)}</text><title>${esc(`${point.label}: ${kg(point.totalVolume)} · ${point.title}`)}</title></g>`).join("")}
+      ${points.map((point, index) => `<g class="chart-point"><circle cx="${point.x}" cy="${point.y}" r="${index === points.length - 1 ? 6 : 4}"/>${index === points.length - 1 ? `<text class="chart-value" x="${point.x}" y="${Math.max(14, point.y - 12)}" text-anchor="middle">${compactKg(point.totalVolume)}</text>` : ""}${index === 0 || index === points.length - 1 || index % labelStep === 0 ? `<text class="chart-label" x="${point.x}" y="${height - 14}" text-anchor="middle">${esc(point.label)}</text>` : ""}<title>${esc(`${point.label}: ${kg(point.totalVolume)} · ${point.title}`)}</title></g>`).join("")}
     </svg>
   </div>`;
 }
