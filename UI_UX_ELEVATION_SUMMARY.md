@@ -94,3 +94,43 @@ The app shell asset version was raised to V20 and the service-worker cache was r
 ### Phase C Cache Version
 
 Static assets and service-worker cache were advanced to V21 for the Progress cockpit release.
+
+## Batch Sprint: Phase D/E/F/G
+
+### Phase D — History / Calendar
+
+- Rebuilt History as an Activity Intelligence surface with a compact month instrument, scroll-safe legend, and previous/next month controls.
+- Promoted the selected date into the primary visual surface with workout state, volume, completed sets, duration, and PR count.
+- Added a unified activity timeline for workout, padel/swimming, nutrition, and body data.
+- Moved detailed exercise, 1RM, set, and PR information into a disclosure so the date summary stays readable.
+- Preserved snapshot-first history and legacy workout fallback behavior.
+
+### Phase E — Nutrition + Logs
+
+- Rebuilt Nutrition as a Daily Fueling cockpit with calorie progress and stable Protein/Carb/Fat instruments.
+- Kept all target, actual intake, adherence, and notes inputs unchanged.
+- Added a Daily Instrument completion summary to Logs.
+- Grouped Body, Recovery, Nutrition, and Notes into clear disclosure sections to remove button and field clutter.
+- Kept daily padel/swimming activity creation and removal unchanged.
+
+### Phase F — Profile + Admin Workspace
+
+- Elevated Profile with stronger athlete identity, private avatar, role/sync context, and compact workout/activity/plan stats.
+- Split Admin Workspace into Users, Athletes, Access, Plans, and Security Notes tabs.
+- Preserved live secure user creation and all existing owner/admin guards.
+- Kept privileged actions disabled when their dedicated Edge Functions are not available.
+- Collapsed exercise editors in Plans so the workspace remains usable without removing any plan field.
+
+### Phase G — Navigation + Motion
+
+- Refined the bottom navigation into a controlled liquid-glass capsule with clearer active state and press feedback.
+- Added fast screen, modal sheet, admin-tab, and PR signal transitions in the 160–240ms range.
+- Preserved reduced-motion behavior and avoided blocking animation in Active Workout.
+
+### Logic Impact
+
+No Supabase, Auth, RLS, storage key, performance formula, workout persistence, or business-data logic changed. Calendar month controls and Admin tabs modify presentation state only.
+
+### Cache Version
+
+Static app assets and the service-worker cache were advanced to V22 so installed PWAs receive the elevated workspaces instead of stale V21 UI.

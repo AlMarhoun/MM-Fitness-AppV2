@@ -24,6 +24,17 @@ Glass is limited to:
 
 Home instruments remain opaque for clarity and rendering stability.
 
+## Phase D/E/F/G
+
+- Calendar month controls use compact 34px icon actions while all primary actions remain at least 40–44px.
+- Daily Logs use native disclosure sections to reduce visible controls without hiding saved values.
+- Admin tabs are horizontally scrollable, sticky, and safe at 320px.
+- Plan exercise editors are collapsed by default and preserve all edit controls when opened.
+- Bottom navigation keeps its existing safe-area offset and adds a restrained active-capsule transition.
+- Modals use a short backdrop fade and sheet entrance; their action contracts are unchanged.
+- Press feedback is limited to actionable controls and does not animate data surfaces.
+- `prefers-reduced-motion: reduce` reduces all new transitions and keyframes to near-zero duration.
+
 ## Interaction Preservation
 
 The following original action contracts remain unchanged:
@@ -35,4 +46,3 @@ The following original action contracts remain unchanged:
 - Cancel with confirmation.
 - Finish with confirmation.
 - Set inputs and completion toggles.
-

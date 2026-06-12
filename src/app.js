@@ -141,6 +141,7 @@ const state = {
   historySelectedDate: initialSessionUi.historySelectedDate || todayStr(),
   strengthPeriod: read("mm-strength-period", "daily"),
   adminPanelOpen: false,
+  adminSection: "users",
   auth: { ...authState },
   syncStatus: getSyncStatus(),
   editingPlan: false,
@@ -804,25 +805,19 @@ function resumeWorkout() {
 }
 function Logs() {
   const log = state.logs[todayStr()] || {};
+  const completed = [log.bodyWeight || log.waist, log.energyScore || log.sorenessScore || log.sleepScore || log.achillesScore, log.dietAdherence, log.notes].filter(Boolean).length;
   return `${Header("Logs", "Daily review")}
+    <section class="daily-log-cockpit">
+      <div><div class="eyebrow">Daily Instrument</div><h1>Today</h1><p>${completed}/4 log areas complete</p></div>
+      <div class="log-completion-ring" style="--progress:${completed * 25}%"><strong>${completed * 25}%</strong><span>Logged</span></div>
+    </section>
     ${HistoryCalendar()}
     ${DailyActivities(state.historySelectedDate)}
-    <section class="form-card">
-      <div class="card-title">Body Metrics</div>
-      ${Field("Weight (kg)", "bodyWeight", log.bodyWeight || "", "number", "e.g. 99.1")}
-      ${Field("Waist (cm)", "waist", log.waist || "", "number", "optional")}
-    </section>
-    <section class="form-card section-gap">
-      <div class="card-title">Recovery</div>
-      ${Score("Energy", "energyScore", log.energyScore)}
-      ${Score("Soreness", "sorenessScore", log.sorenessScore)}
-      ${Score("Sleep", "sleepScore", log.sleepScore)}
-      ${Score("Achilles", "achillesScore", log.achillesScore)}
-    </section>
-    <section class="form-card section-gap">
-      <div class="card-title">Diet Adherence</div>
-      ${Adherence("dietAdherence", log.dietAdherence)}
-      <div class="field"><label>Notes</label><textarea data-log="notes" placeholder="How did today go?">${log.notes || ""}</textarea></div>
+    <section class="log-sections section-gap">
+      <details class="log-section" open><summary><span><b>Body</b><small>Weight and waist</small></span><em>${log.bodyWeight || log.waist ? "Logged" : "Add"}</em></summary><div class="log-section-body">${Field("Weight (kg)", "bodyWeight", log.bodyWeight || "", "number", "e.g. 99.1")}${Field("Waist (cm)", "waist", log.waist || "", "number", "optional")}</div></details>
+      <details class="log-section"><summary><span><b>Recovery</b><small>Energy, sleep and soreness</small></span><em>${log.energyScore || log.sleepScore ? "Partial" : "Add"}</em></summary><div class="log-section-body">${Score("Energy", "energyScore", log.energyScore)}${Score("Soreness", "sorenessScore", log.sorenessScore)}${Score("Sleep", "sleepScore", log.sleepScore)}${Score("Achilles", "achillesScore", log.achillesScore)}</div></details>
+      <details class="log-section"><summary><span><b>Nutrition</b><small>Daily adherence</small></span><em>${log.dietAdherence ? esc(log.dietAdherence) : "Add"}</em></summary><div class="log-section-body">${Adherence("dietAdherence", log.dietAdherence)}</div></details>
+      <details class="log-section"><summary><span><b>Notes</b><small>Context for today</small></span><em>${log.notes ? "Added" : "Add"}</em></summary><div class="log-section-body"><div class="field"><label>Daily Notes</label><textarea data-log="notes" placeholder="How did today go?">${log.notes || ""}</textarea></div></div></details>
     </section>`;
 }
 function HistoryCalendar() {
@@ -841,17 +836,16 @@ function HistoryCalendar() {
     activityLogs: state.activityLogs,
     plan: state.plan
   });
-  return `<section class="card weekly-card section-gap history-panel">
-    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
-      <div>
-        <div class="card-title">History / Calendar</div>
-        <div class="day-meta">${fmtDate(state.historySelectedDate)}</div>
-      </div>
-      <button class="mini-btn" data-action="history-today">Today</button>
-    </div>
-    <div class="calendar-grid section-gap">
+  const monthLabel = dateFrom(state.historySelectedDate).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return `<section class="history-intelligence section-gap">
+    <div class="history-header"><div><div class="eyebrow">Activity Intelligence</div><h2>History</h2></div><button class="mini-btn" data-action="history-today">Today</button></div>
+    <div class="history-calendar-instrument">
+      <div class="calendar-month-control"><button class="icon-action" data-action="history-prev-month" aria-label="Previous month">‹</button><strong>${esc(monthLabel)}</strong><button class="icon-action" data-action="history-next-month" aria-label="Next month">›</button></div>
+      <div class="calendar-grid">
       ${["S","M","T","W","T","F","S"].map((day) => `<div class="calendar-weekday">${day}</div>`).join("")}
       ${cells.map((cell) => CalendarCell(cell)).join("")}
+      </div>
+      <div class="calendar-legend"><span><i class="workout"></i>Workout</span><span><i class="padel"></i>Padel</span><span><i class="swimming"></i>Swim</span><span><i class="nutrition"></i>Nutrition</span><span><i class="missed"></i>Missed</span></div>
     </div>
     ${HistoryDaySummary(history)}
   </section>`;
@@ -880,24 +874,31 @@ function HistoryDaySummary(history) {
   const nutrition = history.nutrition || {};
   const padel = history.padel || {};
   const activities = history.activities || [];
-  return `<div class="history-summary">
-    <div class="summary-line"><span>Workout</span><strong>${summary ? esc(summary.workoutName) : history.status.missed ? "Missed / not logged" : "No workout logged"}</strong></div>
+  const dayStatus = summary ? "Workout complete" : history.status.missed ? "Scheduled session missed" : activities.length || nutrition.adhered || log.bodyWeight ? "Activity logged" : "No activity logged";
+  return `<div class="selected-day-intelligence">
+    <div class="selected-day-head"><div><div class="eyebrow">Selected Day</div><h3>${fmtDate(state.historySelectedDate)}</h3><p>${dayStatus}</p></div><span class="status-orb ${summary ? "complete" : history.status.missed ? "missed" : "idle"}"></span></div>
+    <div class="selected-day-metrics">
+      <div><span>Volume</span><strong>${summary ? kg(summary.totalVolume) : "—"}</strong></div>
+      <div><span>Sets</span><strong>${summary?.completedSets ?? "—"}</strong></div>
+      <div><span>Duration</span><strong>${summary ? `${summary.duration}m` : "—"}</strong></div>
+      <div><span>PRs</span><strong>${history.prs.length || "—"}</strong></div>
+    </div>
+    <div class="activity-timeline">
+      <div class="timeline-item primary"><i></i><div><span>Workout</span><strong>${summary ? esc(summary.workoutName) : history.status.missed ? "Missed / not logged" : "No workout"}</strong></div></div>
+      ${activities.map((activity) => `<div class="timeline-item"><i class="${activity.type}"></i><div><span>${activityLabel(activity.type)}</span><strong>${activity.duration || 0} min · ${esc(activity.intensity || "moderate")}</strong></div></div>`).join("")}
+      <div class="timeline-item"><i class="nutrition"></i><div><span>Nutrition</span><strong>${nutrition.adhered ? esc(nutrition.adhered) : "Not logged"}</strong></div></div>
+      <div class="timeline-item"><i class="body"></i><div><span>Body</span><strong>${log.bodyWeight ? `${log.bodyWeight} kg${log.waist ? ` · ${log.waist} cm` : ""}` : "Not logged"}</strong></div></div>
+    </div>
     ${summary ? `
-      <div class="summary-line"><span>Duration</span><strong>${summary.duration} min</strong></div>
-      <div class="summary-line"><span>Completed Sets</span><strong>${summary.completedSets}</strong></div>
-      <div class="summary-line"><span>Total Volume</span><strong>${kg(summary.totalVolume)}</strong></div>
-      <div class="perf-label">Best estimated 1RM</div>
-      ${summary.bestOneRepMaxHighlights.length ? summary.bestOneRepMaxHighlights.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${kg(item.bestEstimatedOneRepMax)}</strong></div>`).join("") : `<div class="empty small">Not enough weighted data.</div>`}
-      <div class="perf-label">Exercises</div>
-      ${summary.exercises.length ? summary.exercises.map((exercise) => HistoryExercise(exercise)).join("") : `<div class="empty small">No completed weighted sets.</div>`}
-      <div class="perf-label">PRs</div>
-      ${history.prs.length ? history.prs.map((pr) => `<span class="chip success">${esc(pr.exerciseName)} · ${esc(pr.label)}</span>`).join("") : `<div class="empty small">No PRs detected.</div>`}
+      <details class="history-detail-disclosure"><summary>Workout details <span>${summary.exercises.length} exercises</span></summary><div class="history-summary">
+        <div class="perf-label">Best estimated 1RM</div>
+        ${summary.bestOneRepMaxHighlights.length ? summary.bestOneRepMaxHighlights.map((item) => `<div class="summary-line"><span>${esc(item.exerciseName)}</span><strong>${kg(item.bestEstimatedOneRepMax)}</strong></div>`).join("") : `<div class="empty small">Not enough weighted data.</div>`}
+        <div class="perf-label">Exercises</div>
+        ${summary.exercises.length ? summary.exercises.map((exercise) => HistoryExercise(exercise)).join("") : `<div class="empty small">No completed weighted sets.</div>`}
+        <div class="perf-label">Personal records</div>
+        ${history.prs.length ? history.prs.map((pr) => `<span class="chip success">${esc(pr.exerciseName)} · ${esc(pr.label)}</span>`).join("") : `<div class="empty small">No PRs detected.</div>`}
+      </div></details>
     ` : ""}
-    <div class="summary-divider"></div>
-    <div class="summary-line"><span>Nutrition</span><strong>${nutrition.adhered ? esc(nutrition.adhered) : "No nutrition log"}</strong></div>
-    <div class="perf-label">Activities</div>
-    ${activities.length ? activities.map(ActivityHistoryRow).join("") : `<div class="empty small">No activity logged.</div>`}
-    <div class="summary-line"><span>Body</span><strong>${log.bodyWeight ? `${log.bodyWeight} kg` : "No body metrics"}</strong></div>
     ${log.notes ? `<div class="day-meta history-note">${esc(log.notes)}</div>` : ""}
   </div>`;
 }
@@ -906,7 +907,7 @@ function ActivityHistoryRow(activity) {
 }
 function DailyActivities(date) {
   const activities = activitiesForDate(state.activityLogs, date, state.padelLogs);
-  return `<section class="form-card section-gap activity-panel">
+  return `<section class="form-card section-gap activity-panel log-section-activity">
     <div class="activity-panel-head">
       <div><div class="card-title">Daily Activities</div><div class="day-meta">${fmtDate(date)} · Padel or swimming</div></div>
       <button class="btn btn-primary" data-action="add-activity" style="min-height:40px;padding:0 14px">Add Activity</button>
@@ -942,19 +943,23 @@ function Adherence(field, value) {
 function Nutrition() {
   const d = todayPlan();
   const nl = state.nutritionLogs[todayStr()] || {};
+  const caloriePct = pct(Number(nl.actualCalories || 0), Number(d.calories || 0));
   return `${Header("Nutrition", `${d.nutritionType} day · ${fmtDate()}`)}
-    <section class="command-card">
-      <div class="eyebrow">Today's Target</div>
-      <div class="command-title">${d.calories}<span style="font-size:14px;color:var(--muted)"> kcal</span></div>
-      <p class="command-copy">${d.protein}g protein · ${d.carbs}g carbs · ${d.fats}g fats</p>
-      <div class="chip-row"><span class="chip warning">${d.nutritionType}</span><span class="chip">Fiber 30g+</span></div>
+    <section class="nutrition-cockpit">
+      <div class="nutrition-head"><div><div class="eyebrow">Daily Fueling</div><h1>${d.nutritionType} Day</h1><p>${nl.actualCalories ? `${Math.max(0, d.calories - Number(nl.actualCalories))} kcal remaining` : "Log intake to track today"}</p></div><div class="calorie-ring" style="--progress:${caloriePct}%"><strong>${caloriePct}%</strong><span>${nl.actualCalories || 0} / ${d.calories}</span></div></div>
+      <div class="macro-instrument-grid">
+        ${MacroInstrument("Protein", nl.actualProtein, d.protein, "P")}
+        ${MacroInstrument("Carbs", nl.actualCarbs, d.carbs, "C")}
+        ${MacroInstrument("Fats", nl.actualFats, d.fats, "F")}
+      </div>
+      <div class="fueling-context"><span class="chip warning">${d.nutritionType}</span><span>${d.category || "Training"} context</span><span>Fiber 30g+</span></div>
     </section>
-    <section class="form-card section-gap">
-      <div class="card-title">Adherence</div>
+    <section class="form-card section-gap nutrition-adherence-card">
+      <div><div class="eyebrow">Daily Status</div><div class="card-title">Adherence</div></div>
       ${Adherence("nutrition", nl.adhered)}
     </section>
-    <section class="form-card section-gap">
-      <div class="card-title">Actual Intake</div>
+    <section class="form-card section-gap nutrition-entry-card">
+      <div><div class="eyebrow">Fuel Log</div><div class="card-title">Actual Intake</div></div>
       <div class="grid-2">
         ${NutritionField("Calories", "actualCalories", nl.actualCalories)}
         ${NutritionField("Protein", "actualProtein", nl.actualProtein)}
@@ -963,6 +968,10 @@ function Nutrition() {
       </div>
       <div class="field"><label>Notes</label><textarea data-nutrition="notes" placeholder="Nutrition notes">${nl.notes || ""}</textarea></div>
     </section>`;
+}
+function MacroInstrument(label, actual, target, mark) {
+  const progress = pct(Number(actual || 0), Number(target || 0));
+  return `<div class="macro-instrument"><span>${mark}</span><strong>${actual || "—"}<small> / ${target}g</small></strong><em>${label}</em><div class="rail"><i style="--pct:${progress}%"></i></div></div>`;
 }
 function NutritionField(label, field, value) {
   return `<div class="field"><label>${label}</label><input class="input" type="number" data-nutrition="${field}" placeholder="0" value="${value || ""}" /></div>`;
@@ -1136,18 +1145,21 @@ function formatShortDate(date) {
 function ProfileScreen() {
   const profile = state.auth.profile || {};
   const canAdmin = canOpenAdminPanel(profile);
+  const completedWorkouts = Object.values(state.workoutLogs || {}).filter((item) => item?.completed || item?.completedAt || item?.date).length;
+  const activityCount = Object.values(state.activityLogs || {}).flat().length + Object.keys(state.padelLogs || {}).length;
   return `${Header("Profile", "Private athlete identity", `<button class="btn btn-secondary" data-action="profile-back" style="min-height:40px">Back</button>`)}
-    <section class="profile-hero">
+    <section class="profile-cockpit">
       <div class="profile-avatar-wrap">${Avatar(profile, "profile-avatar profile-avatar-large")}</div>
       <div class="profile-identity">
         <div class="eyebrow">${esc(roleLabel(profile.role || ROLES.ATHLETE))}</div>
         <h2>${esc(profile.display_name || "MM Athlete")}</h2>
-        <p>${esc(profile.email || state.auth.user?.email || "")}</p>
-        <span class="chip success">${esc((state.syncStatus || getSyncStatus()).label)}</span>
+        <p>${esc(profile.bio || "Private athlete profile and performance identity.")}</p>
+        <div class="profile-status-row"><span class="chip success">${esc((state.syncStatus || getSyncStatus()).label)}</span><span class="chip">${esc(profile.email || state.auth.user?.email || "")}</span></div>
       </div>
+      <div class="profile-stat-strip"><div><span>Workouts</span><strong>${completedWorkouts}</strong></div><div><span>Activities</span><strong>${activityCount}</strong></div><div><span>Plan</span><strong>W${weekNumber()}</strong></div></div>
     </section>
-    <section class="form-card section-gap">
-      <div class="card-title">Personal Profile</div>
+    <section class="form-card section-gap profile-settings-card">
+      <div><div class="eyebrow">Identity</div><div class="card-title">Personal Profile</div></div>
       <div class="field"><label>Profile Picture</label><input class="input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" data-profile-avatar /></div>
       <div class="field"><label>Display Name</label><input class="input" data-profile-field="display_name" value="${esc(profile.display_name || "")}" /></div>
       <div class="field"><label>Bio</label><textarea data-profile-field="bio" placeholder="Training focus, goals, or coaching notes">${esc(profile.bio || "")}</textarea></div>
@@ -1232,7 +1244,8 @@ function compactKg(value) {
 function AdminPanel() {
   const currentEmail = state.auth.profile?.email || state.auth.user?.email || "Signed-in user";
   const role = isOwnerEmail(currentEmail) ? ROLES.OWNER : (state.auth.profile?.role || ROLES.ATHLETE);
-  return `<section class="form-card section-gap admin-panel">
+  const section = state.adminSection || "users";
+  return `<section class="section-gap admin-panel">
     <div class="admin-hero">
       <div>
         <div class="eyebrow">Owner Command Center</div>
@@ -1247,23 +1260,22 @@ function AdminPanel() {
       ${AdminKpi("Athletes", state.adminAthletes.length || "—", state.adminAthletes.length ? "Separate profiles" : "Load directory")}
       ${AdminKpi("Security", "RLS", "Database policies applied")}
     </div>
-    <div class="admin-current-user section-gap">
-      <div>
-        <div class="eyebrow">Signed In</div>
-        <strong>${esc(currentEmail)}</strong>
-        <div class="day-meta">${roleLabel(role)} · active · cloud account</div>
-      </div>
-      <span class="chip success">${esc(role)}</span>
-    </div>
-    ${AdminPlayerCommandCenter()}
-    ${AdminCreateUserForm()}
-    <div class="admin-section section-gap">
+    <nav class="admin-workspace-tabs" aria-label="Admin workspace sections">
+      ${[["users","Users"],["athletes","Athletes"],["access","Access"],["plans","Plans"],["security","Security Notes"]].map(([id,label]) => `<button class="${section === id ? "active" : ""}" data-admin-section="${id}">${label}</button>`).join("")}
+    </nav>
+    <div class="admin-workspace-panel section-gap">${AdminWorkspaceSection(section, currentEmail, role)}</div>
+  </section>`;
+}
+function AdminWorkspaceSection(section, currentEmail, role) {
+  if (section === "athletes") return AdminPlayerCommandCenter("athletes");
+  if (section === "plans") return AdminPlayerCommandCenter("plans");
+  if (section === "access") return `<div class="admin-section">
       <div class="admin-section-head">
         <div>
-          <div class="eyebrow">Primary Actions</div>
-          <div class="card-title">Straightforward Access Control</div>
+          <div class="eyebrow">Access</div>
+          <div class="card-title">Roles & Permissions</div>
         </div>
-        <span class="chip warning">More functions pending</span>
+        <span class="chip warning">Protected actions</span>
       </div>
       <div class="admin-action-grid premium">
         ${AdminAction("Invite user", "Send a secure invite and choose initial role.", "invite-user")}
@@ -1274,46 +1286,45 @@ function AdminPanel() {
         ${AdminAction("Audit logs", "Review sensitive admin activity.", "audit_logs.view")}
       </div>
       <div class="admin-note">Add User is live above through the create-user Edge Function. These remaining controls stay locked until their own Edge Functions are deployed.</div>
-    </div>
-    <div class="admin-section section-gap">
-      <div class="admin-section-head">
-        <div>
-          <div class="eyebrow">Roles</div>
-          <div class="card-title">Default Authority Levels</div>
-        </div>
-      </div>
+      <div class="admin-section-head section-gap"><div><div class="eyebrow">Roles</div><div class="card-title">Default Authority Levels</div></div></div>
       <div class="role-stack">
         ${Object.entries(ROLE_DEFINITIONS).map(([key, description]) => `<div class="role-row"><span>${roleLabel(key)}</span><strong>${esc(description)}</strong></div>`).join("")}
       </div>
-    </div>
-    <div class="admin-section section-gap">
-      <div class="admin-section-head">
-        <div>
-          <div class="eyebrow">Permissions Table</div>
-          <div class="card-title">Granular Controls</div>
-        </div>
-      </div>
+      <div class="admin-section-head section-gap"><div><div class="eyebrow">Permissions Table</div><div class="card-title">Granular Controls</div></div></div>
       ${Object.entries(PERMISSIONS).map(([category, keys]) => `<details class="permission-group"><summary>${esc(category.replaceAll("_", " "))}<span>${keys.length}</span></summary><div class="permission-chip-grid">${keys.map((key) => `<span class="chip">${esc(key)}</span>`).join("")}</div></details>`).join("")}
-    </div>
-    <div class="admin-section section-gap">
+    </div>`;
+  if (section === "security") return `<div class="admin-section">
       <div class="admin-section-head">
         <div>
-          <div class="eyebrow">Activation Checklist</div>
-          <div class="card-title">Production Unlock</div>
+          <div class="eyebrow">Security Notes</div>
+          <div class="card-title">Production Boundary</div>
         </div>
       </div>
+      <div class="admin-note">User isolation, role checks, and database access are enforced by Supabase policies. Disabled actions require dedicated Edge Functions and remain unavailable in the browser.</div>
       ${AdminChecklist("Supabase migrations applied", true)}
       ${AdminChecklist("Public signup disabled", true)}
       ${AdminChecklist("Owner role assigned", role === ROLES.OWNER)}
       ${AdminChecklist("Create user Edge Function deployed", true)}
       ${AdminChecklist("Player plan manager enabled", true)}
+    </div>`;
+  return `<div class="admin-section">
+    <div class="admin-current-user">
+      <div><div class="eyebrow">Signed In</div><strong>${esc(currentEmail)}</strong><div class="day-meta">${roleLabel(role)} · active · cloud account</div></div>
+      <span class="chip success">${esc(role)}</span>
     </div>
-  </section>`;
+    ${AdminUserDirectory()}
+    ${AdminCreateUserForm()}
+  </div>`;
+}
+function AdminUserDirectory() {
+  return `<div class="admin-section section-gap"><div class="admin-section-head"><div><div class="eyebrow">Users</div><div class="card-title">User Directory</div></div><button class="mini-btn" data-action="admin-refresh-directory">Refresh</button></div>
+    <div class="admin-user-directory">${state.adminUsers.length ? state.adminUsers.map((user) => `<article class="admin-user-row">${Avatar(user, "profile-avatar player-list-avatar")}<div><strong>${esc(user.display_name || user.email || "User")}</strong><span>${esc(user.email || "No email")}</span></div><em class="chip">${esc(roleLabel(user.role || ROLES.ATHLETE))}</em></article>`).join("") : `<div class="empty small">Refresh the secure directory to view users.</div>`}</div>
+  </div>`;
 }
 function AdminKpi(label, value, note) {
   return `<div class="admin-kpi"><span>${label}</span><strong>${esc(value)}</strong><small>${esc(note)}</small></div>`;
 }
-function AdminPlayerCommandCenter() {
+function AdminPlayerCommandCenter(mode = "athletes") {
   const athlete = selectedAdminAthlete();
   const user = selectedAdminUser();
   const summary = summarizeAthleteSnapshot(state.adminPlayerSnapshot || null);
@@ -1321,8 +1332,8 @@ function AdminPlayerCommandCenter() {
   return `<div class="admin-section section-gap player-command-center">
     <div class="admin-section-head">
       <div>
-        <div class="eyebrow">Player Command Center</div>
-        <div class="card-title">Activity + Personal Plan</div>
+        <div class="eyebrow">${mode === "plans" ? "Plans" : "Athletes"}</div>
+        <div class="card-title">${mode === "plans" ? "Player Plan Manager" : "Player Directory & Activity"}</div>
       </div>
       <button class="mini-btn" data-action="admin-refresh-directory">Refresh</button>
     </div>
@@ -1347,8 +1358,7 @@ function AdminPlayerCommandCenter() {
       </div>
       <span class="chip ${athlete?.id === currentAthleteId() ? "success" : ""}">${athlete?.id === currentAthleteId() ? "You" : "Player"}</span>
     </div>
-    ${AdminPlayerActivity(summary)}
-    ${AdminPlayerPlanEditor()}` : `<div class="empty card section-gap">No player profiles loaded yet. Create a user with “New athlete profile” or refresh the directory.</div>`}
+    ${mode === "plans" ? AdminPlayerPlanEditor() : AdminPlayerActivity(summary)}` : `<div class="empty card section-gap">No player profiles loaded yet. Create a user with “New athlete profile” or refresh the directory.</div>`}
   </div>`;
 }
 function AdminPlayerActivity(summary) {
@@ -1416,15 +1426,14 @@ function AdminPlanField(label, dayIdx, field, value, type = "text") {
   return `<div class="field"><label>${label}</label><input class="input" data-admin-plan-field="${dayIdx}" data-field="${field}" type="${type}" value="${esc(value)}" /></div>`;
 }
 function AdminExerciseEditor(ex, i, dayIdx) {
-  return `<article class="exercise-card edit-exercise admin-exercise-card">
-    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-      <div class="day-title">${i + 1}. ${esc(ex.name || "Exercise")}</div>
-      <div style="display:flex;gap:6px">
+  return `<details class="admin-exercise-disclosure">
+    <summary><span><b>${i + 1}. ${esc(ex.name || "Exercise")}</b><small>${esc(ex.sets || 0)} sets · ${esc(ex.reps || "—")} reps · ${esc(ex.rest || 0)}s rest</small></span><em>Edit</em></summary>
+    <article class="exercise-card edit-exercise admin-exercise-card">
+      <div class="admin-exercise-actions">
         <button class="mini-btn" data-admin-move-ex="${i}" data-dir="-1">↑</button>
         <button class="mini-btn" data-admin-move-ex="${i}" data-dir="1">↓</button>
         <button class="mini-btn danger" data-admin-remove-ex="${i}">Remove</button>
       </div>
-    </div>
     <div class="field"><label>Name</label><input class="input" data-admin-edit-ex="${i}" data-field="name" value="${esc(ex.name || "")}" /></div>
     <div class="edit-grid">
       <div class="field"><label>Sets</label><input class="input" type="number" data-admin-edit-ex="${i}" data-field="sets" value="${esc(ex.sets || 0)}" /></div>
@@ -1434,7 +1443,8 @@ function AdminExerciseEditor(ex, i, dayIdx) {
     </div>
     <div class="field"><label>Intensity</label><input class="input" data-admin-edit-ex="${i}" data-field="intensity" value="${esc(ex.intensity || "")}" /></div>
     <div class="field"><label>Notes</label><textarea data-admin-edit-ex="${i}" data-field="notes">${esc(ex.notes || "")}</textarea></div>
-  </article>`;
+    </article>
+  </details>`;
 }
 function AdminCreateUserForm() {
   return `<div class="admin-section section-gap admin-create-user">
@@ -1487,7 +1497,7 @@ function BottomNav() {
   const items = [["home","Home","home"],["plan","Plan","plan"],["logs","Logs","logs"],["nutrition","Nutrition","nutrition"],["progress","Progress","progress"]];
   if (state.auth.loading || !state.auth.user) return "";
   if (state.screen === "active" || state.screen === "admin") return "";
-  return `<nav class="bottom-nav" aria-label="Primary navigation">${items.map(([id, label, ico]) => {
+  return `<nav class="bottom-nav liquid-bottom-nav" aria-label="Primary navigation">${items.map(([id, label, ico]) => {
     const active = state.screen === id;
     const mark = id === "home" ? brandGlyph(active ? "nav-signature active" : "nav-signature") : icon(ico);
     return `<button class="nav-btn ${active ? "active" : ""}" data-nav="${id}" aria-current="${active ? "page" : "false"}">${mark}<span>${label}</span></button>`;
@@ -1496,8 +1506,8 @@ function BottomNav() {
 function Modal() {
   if (!state.modal) return "";
   const m = state.modal;
-  return `<div class="modal-backdrop" role="dialog" aria-modal="true">
-    <div class="modal">
+  return `<div class="modal-backdrop motion-backdrop" role="dialog" aria-modal="true">
+    <div class="modal motion-sheet">
       <div class="card-title">${m.title}</div>
       ${m.bodyHtml || `<p class="day-meta" style="margin:8px 0 0">${m.body}</p>`}
       <div class="modal-actions">
@@ -1565,6 +1575,10 @@ function confirmFinish() {
 }
 function bind() {
   document.querySelectorAll("[data-nav]").forEach((el) => el.addEventListener("click", () => setScreen(el.dataset.nav)));
+  document.querySelectorAll("[data-admin-section]").forEach((el) => el.addEventListener("click", () => {
+    state.adminSection = el.dataset.adminSection;
+    render();
+  }));
   document.querySelectorAll("[data-day]").forEach((el) => el.addEventListener("click", () => { state.selectedDay = Number(el.dataset.day); state.screen = "plan"; render(); }));
   document.querySelectorAll("[data-quick]").forEach((el) => el.addEventListener("click", () => {
     if (el.dataset.quick === "activity") openActivityModal(todayStr(), todayPlan().hasPadel ? "padel" : "swimming");
@@ -1888,6 +1902,13 @@ async function handleAction(action) {
   if (action === "go-logs") setScreen("logs");
   if (action === "go-progress") setScreen("progress");
   if (action === "history-today") { state.historySelectedDate = todayStr(); render(); }
+  if (action === "history-prev-month" || action === "history-next-month") {
+    const selected = dateFrom(state.historySelectedDate);
+    selected.setDate(1);
+    selected.setMonth(selected.getMonth() + (action === "history-next-month" ? 1 : -1));
+    state.historySelectedDate = selected.toISOString().slice(0, 10);
+    render();
+  }
   if (action === "add-activity") openActivityModal(state.historySelectedDate || todayStr(), "padel");
   if (action === "toggle-padel") togglePadel();
   if (action === "pause-workout") pauseWorkout();

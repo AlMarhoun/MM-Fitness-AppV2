@@ -1,5 +1,15 @@
 # Known Issues
 
+## Phase H Release Candidate
+
+- Real iPhone Add to Home Screen lock/unlock, safe-area, OLED contrast, avatar picker, and service-worker replacement are still pending physical device validation.
+- Live owner/admin/athlete/viewer RLS isolation still requires separate Supabase accounts and cross-role testing.
+- The Login screen was source- and security-tested without logging out of the current authenticated browser session; a clean-session rendered Login check remains part of the final test deployment pass.
+- The current live account had no recent PR item, so the PR-rich timeline state remains covered by deterministic model tests rather than a live rendered PR record.
+- Legacy workout logs without exercise snapshots continue to use the documented current-plan fallback.
+- Admin actions without deployed secure Edge Functions remain disabled by design.
+- The project folder is not currently a Git working tree, so Phase H did not produce Git status/diff evidence. No merge, push, deploy, or Documents transfer occurred.
+
 ## Pending Device Validation: iOS PWA Redirect Fix
 
 - Code fix completed on June 11, 2026.
@@ -52,7 +62,7 @@ No known syntax-level issues after Phase 1 verification.
 
 - Phase A/B require physical iPhone Add to Home Screen visual validation, especially safe-area spacing around the fixed Finish Workout dock.
 - Existing pending real-device lock/unlock validation remains open; browser reload restoration passed but is not a substitute for an iOS lifecycle test.
-- History, Nutrition, Logs, Profile, Admin, and Navigation still use the pre-V3 structure until their approved phases are implemented.
+- Phase D/E/F/G now use Performance Instrument V3. Phase H browser and automated QA completed; physical iPhone validation remains pending.
 
 ## Phase C Notes
 
@@ -60,3 +70,12 @@ No known syntax-level issues after Phase 1 verification.
 - The current live account did not contain a recent PR, so the PR-rich visual timeline was verified through deterministic model tests rather than a live rendered PR record.
 - Strength leaderboard candidates inherit the existing `summarizeProgress` behavior, which seeds exercise names from the current plan. Historical exercises removed from the plan can remain available in History but may not appear in the top leaderboard.
 - Physical iPhone Add to Home Screen visual validation remains pending.
+
+## Phase D/E/F/G Notes
+
+- Physical iPhone Add to Home Screen testing remains required for safe-area spacing, navigation motion, modal reachability, and lock/unlock behavior.
+- Old workout logs without exercise snapshots still use the documented current-plan fallback.
+- Privileged Admin actions other than the deployed create-user flow remain disabled until dedicated secure Edge Functions exist.
+- Live owner/admin/athlete/viewer isolation still requires cross-account Supabase/RLS testing.
+- Admin Plans are significantly shorter with collapsed exercises, but large plans naturally remain scrollable.
+- Browser screenshot capture timed out in the test surface; rendered DOM, interaction, viewport, and overflow checks completed successfully.

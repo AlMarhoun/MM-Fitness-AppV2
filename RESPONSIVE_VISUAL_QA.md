@@ -73,3 +73,26 @@ Tested in the Codex in-app browser at 844px viewport height.
 - Dark theme: passed visual and contrast review.
 - Light theme: passed rendered review at 390px with no overflow.
 - Physical iPhone theme and safe-area review remains pending.
+
+## Phase D/E/F/G Browser Sweep
+
+Rendered at 844px height using widths 320, 360, 375, 390, 414, 430, and 480px.
+
+| Screen | 320 | 360 | 375 | 390 | 414 | 430 | 480 |
+|---|---|---|---|---|---|---|---|
+| History / Logs | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Nutrition | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Profile | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Admin Users | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+| Admin Plans | Pass | Pass | Pass | Pass | Pass | Pass | Pass |
+
+At every width, document width matched viewport width exactly. No horizontal overflow, cut-off controls, calendar overflow, macro overflow, modal overflow, or bottom-navigation overlap was detected.
+
+### Fixes From Rendered QA
+
+- Profile originally failed because workout logs use a keyed object rather than an array. The profile summary now reads `Object.values(state.workoutLogs || {})`; an automated contract guards the storage shape.
+- Admin Plans initially rendered roughly 7,300px tall at 320px. Exercise editors now use collapsed disclosures, reducing the initial Plans workspace to roughly 2,650px while preserving every input.
+- The Add Activity modal stayed inside the 320×844 viewport with its bottom at 841px and no horizontal overflow.
+- Light theme rendered at 390px without overflow; dark theme remained the primary reviewed direction.
+
+Physical iPhone Add to Home Screen, thumb reach, safe-area, and OLED contrast validation remain pending.

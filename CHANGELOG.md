@@ -290,3 +290,28 @@ Not changed:
 - Reduced chart label density and removed misleading one-point trend rendering.
 - Added Progress model and snapshot-fallback tests.
 - Bumped static asset and service-worker cache version to V21.
+
+## Performance Instrument V3 - Phase D/E/F/G
+
+- Elevated History into selected-day Activity Intelligence with month controls, markers, timeline, metrics, and compact workout details.
+- Elevated Nutrition into a Daily Fueling cockpit with calorie and macro progress instruments.
+- Reorganized Logs into Body, Recovery, Nutrition, Activities, and Notes sections.
+- Elevated Profile identity, private avatar presentation, role/sync context, and personal statistics.
+- Split Admin Workspace into Users, Athletes, Access, Plans, and Security Notes.
+- Added compact user directory and retained secure create-user flow.
+- Collapsed Admin plan exercise editors to reduce initial page length while keeping full editing.
+- Added liquid bottom-navigation polish, modal/screen transitions, press states, PR signal motion, and reduced-motion support.
+- Fixed Profile rendering for the keyed workout-log storage model.
+- Added V3 UI contracts for all new workspaces and preserved existing action contracts.
+- Bumped static asset and service-worker cache version to V22.
+
+## 2026-06-12 - Phase H Release Candidate QA
+
+- Ran the complete syntax, manifest, PWA, security, V3 UI, Progress, performance trend, and activity test suite successfully.
+- Performed rendered browser QA for the full app flow and requested 320-480px widths.
+- Verified Active Workout refresh restoration of screen, set data, completion state, timer state, and exact scroll position.
+- Fixed Admin Users horizontal overflow at 320px by applying the intended grid layout.
+- Added a V3 UI regression assertion for the Admin user-row layout.
+- Bumped static assets and service-worker cache to `v23-release-candidate`.
+- Added final release-candidate, browser, iPhone, security, and PWA/cache reports.
+- No merge, push, deploy, or Documents transfer was performed.

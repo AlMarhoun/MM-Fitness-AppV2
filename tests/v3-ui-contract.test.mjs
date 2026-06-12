@@ -20,6 +20,19 @@ const requiredAppContracts = [
   ,"consistency-strip"
   ,"body-metric-trend"
   ,"recovery-pattern"
+  ,"history-intelligence"
+  ,"history-calendar-instrument"
+  ,"selected-day-intelligence"
+  ,"activity-timeline"
+  ,"nutrition-cockpit"
+  ,"macro-instrument-grid"
+  ,"daily-log-cockpit"
+  ,"log-section"
+  ,"profile-cockpit"
+  ,"admin-workspace-tabs"
+  ,"admin-workspace-panel"
+  ,"admin-exercise-disclosure"
+  ,"liquid-bottom-nav"
 ];
 
 for (const contract of requiredAppContracts) {
@@ -38,6 +51,13 @@ const requiredCssContracts = [
   ,".volume-intelligence"
   ,".strength-leaderboard"
   ,".pr-timeline"
+  ,".history-intelligence"
+  ,".nutrition-cockpit"
+  ,".daily-log-cockpit"
+  ,".profile-cockpit"
+  ,".admin-workspace-tabs"
+  ,".liquid-bottom-nav"
+  ,"@keyframes screenIn"
 ];
 
 for (const contract of requiredCssContracts) {
@@ -49,5 +69,9 @@ assert.match(app, /data-action="pause-workout"/, "Active Workout must preserve p
 assert.match(app, /data-action="resume-workout"/, "Active Workout must preserve resume");
 assert.match(app, /data-action="cancel-workout"/, "Active Workout must preserve safe cancellation");
 assert.match(app, /data-action="finish-workout"/, "Active Workout must preserve finish confirmation");
+assert.match(app, /data-action="admin-create-user"/, "Admin Workspace must preserve secure user creation");
+assert.doesNotMatch(app, /signUp\(/, "Public signup must remain absent from the UI implementation");
+assert.ok(app.includes("Object.values(state.workoutLogs"), "Profile metrics must support the keyed workout-log storage model");
+assert.match(css, /\.admin-user-row\s*\{\s*display:\s*grid;/, "Admin user rows must use a shrink-safe grid at 320px");
 
 console.log("Performance Instrument V3 UI contracts are present.");

@@ -82,3 +82,39 @@ Phase A and Phase B pass browser-level regression testing. Physical iPhone PWA v
 | Front-End Lead Engineer | Approved | Progress data shaping risked bloating `app.js`. | Added tested `progressCockpit.js`; persistence and formulas remain untouched. | Existing string-template architecture still limits deeper component separation. |
 | QA Lead | Approved | Required no-data, partial, snapshot, fallback, theme, and responsive states needed evidence. | Added model tests and browser checks across all requested widths. | PR-rich visual state was model-tested; current live account had no recent PR to render. |
 | Red Team Reviewer | Approved | Empty Recovery added noise and Next Focus requested two sessions when one already existed. | Recovery now hides without data; Next Focus requests exactly one additional session. | Removed exercises may remain absent from the leaderboard because existing `bestByExercise` is seeded from the current plan. |
+
+## Phase D/E/F/G Regression
+
+### Automated Results
+
+All passed: JavaScript syntax, manifest JSON, PWA redirect safeguards, security/auth/athlete isolation safeguards, V3 UI contracts, Progress model, performance trend, and daily activity tests.
+
+### Rendered Results
+
+- History selected-day intelligence, month navigation, legends, and no-data state rendered correctly.
+- Nutrition target-only state rendered without inventing actual intake.
+- Profile rendered current role, sync state, identity, and derived stats without changing persisted data.
+- Admin Users, Athletes, Access, and Plans tabs switched correctly; disabled privileged actions remained disabled.
+- Plan exercise disclosure opened with all six existing inputs available.
+- Add Activity modal opened and closed without saving test data.
+- Dark and light themes rendered; widths 320–480px had no horizontal overflow.
+- No forms that write cloud or local data were submitted during QA.
+
+### 14-Role Review
+
+| Reviewer | Verdict | Issue found | Fix applied | Remaining concern |
+|---|---|---|---|---|
+| Product Director | Approved | History and Admin required too much scanning. | Promoted selected-day intelligence and split Admin by user task. | More real-world activity history will improve density decisions. |
+| Premium UI Director | Approved | Repeated equal-weight cards weakened hierarchy. | Added stronger cockpit surfaces and controlled glass only on key instruments. | Physical OLED review remains pending. |
+| Mobile UX Designer | Approved | Logs and Plans exposed too many controls simultaneously. | Added grouped log sections and collapsed exercise editors. | Real one-hand iPhone testing remains pending. |
+| Design System Architect | Approved | Remaining screens did not consistently use V3 hierarchy. | Applied shared surface, metric, disclosure, badge, and tab patterns. | Existing template architecture limits full component isolation. |
+| Motion and Interaction Designer | Approved | Navigation and sheets lacked cohesive feedback. | Added 160–240ms transitions and reduced-motion coverage. | iOS animation smoothness needs device validation. |
+| Fitness Product Specialist | Approved | Selected dates did not prioritize workout outcome and performance. | Added volume, sets, duration, PRs, and workout timeline first. | Legacy logs can only show data that exists. |
+| Data Visualization Designer | Approved | Nutrition and History lacked compact visual status. | Added calorie/macro instruments and selected-day metrics. | No new chart calculations were introduced by design. |
+| Front-End Lead Engineer | Approved | Profile assumed an array storage shape; Plans were excessively long. | Fixed keyed-log reading and collapsed exercise editors with tests. | `app.js` remains large due the existing architecture. |
+| Supabase/Auth Engineer | Approved | UI restructuring risked bypassing existing controls. | Reused all existing action contracts and auth helpers unchanged. | Multi-role live account testing remains required. |
+| Security/RLS Reviewer | Approved | Admin tabs could imply disabled actions were live. | Kept dangerous actions disabled and added explicit backend-boundary copy. | RLS still needs live cross-role verification. |
+| PWA/iOS Reviewer | Approved | New assets could remain hidden by V21 cache. | Bumped app shell and service worker to V22. | Physical A2HS testing remains pending. |
+| QA Lead | Approved | Profile regression and 320px Plans length were found. | Both were fixed and rerun across requested widths. | Screenshot capture tooling timed out; DOM/layout browser evidence passed. |
+| Red Team Reviewer | Approved | A visually improved Admin could still remain a 7,000px form. | Tabs plus collapsed exercise disclosures reduced initial page length materially. | Plans with unusually large exercise lists will still require scrolling by design. |
+| Technical Writer | Approved | Phase scope and untouched logic needed explicit evidence. | Updated elevation, interaction, responsive, regression, issue, and changelog documents. | Final Phase H remains intentionally unstarted. |
