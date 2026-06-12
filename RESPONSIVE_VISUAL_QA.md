@@ -99,3 +99,17 @@ Physical iPhone Add to Home Screen, thumb reach, safe-area, and OLED contrast va
 # Performance Rhythm Responsive Check - June 12, 2026
 
 Motion uses only opacity, transform, stroke offset, and bounded progress width. It does not change the stable dimensions of cards, inputs, charts, calendar cells, the workout finish dock, or bottom navigation. Automated contracts cover the centralized hooks and reduced-motion fallback. Rendered browser verification is recorded with the final task report.
+
+# Nutrition Fueling Cockpit - June 13, 2026
+
+| Width | Document width | Overflowing elements | Result |
+|---:|---:|---:|---|
+| 320 | 320 | 0 | Pass |
+| 360 | 360 | 0 | Pass |
+| 375 | 375 | 0 | Pass |
+| 390 | 390 | 0 | Pass |
+| 414 | 414 | 0 | Pass |
+| 430 | 430 | 0 | Pass |
+| 480 | 480 | 0 | Pass |
+
+The cockpit, macro instruments, empty pie state, remaining card, entry list, bottom navigation, and nutrition entry sheet stayed inside the viewport. Automated screenshot capture timed out in the browser surface; DOM layout and full interactive flow were verified.

@@ -148,6 +148,8 @@ export async function fetchCloudDataset(athleteId) {
     sessions,
     dailyLogs,
     nutritionLogs,
+    nutritionEntries,
+    savedMeals,
     padelSessions,
     settings
   ] = await Promise.all([
@@ -155,6 +157,8 @@ export async function fetchCloudDataset(athleteId) {
     supabase.from("workout_sessions").select("*,exercise_snapshots(*,workout_sets(*))").eq("athlete_id", athleteId).order("date", { ascending: false }),
     supabase.from("daily_logs").select("*").eq("athlete_id", athleteId),
     supabase.from("nutrition_logs").select("*").eq("athlete_id", athleteId),
+    supabase.from("nutrition_entries").select("*").eq("athlete_id", athleteId),
+    supabase.from("nutrition_saved_meals").select("*").eq("athlete_id", athleteId),
     supabase.from("padel_sessions").select("*").eq("athlete_id", athleteId),
     supabase.from("app_settings").select("setting_key,setting_value").eq("athlete_id", athleteId)
   ]);
@@ -162,12 +166,19 @@ export async function fetchCloudDataset(athleteId) {
   for (const result of [plans, sessions, dailyLogs, nutritionLogs, padelSessions, settings]) {
     if (result.error) throw result.error;
   }
+  const optionalData = (result) => {
+    if (!result.error) return result.data || [];
+    if (["42P01", "PGRST205"].includes(result.error.code)) return undefined;
+    throw result.error;
+  };
 
   return {
     plan: plans.data,
     workoutSessions: sessions.data || [],
     dailyLogs: dailyLogs.data || [],
     nutritionLogs: nutritionLogs.data || [],
+    nutritionEntries: optionalData(nutritionEntries),
+    savedMeals: optionalData(savedMeals),
     padelSessions: padelSessions.data || [],
     settings: settings.data || []
   };

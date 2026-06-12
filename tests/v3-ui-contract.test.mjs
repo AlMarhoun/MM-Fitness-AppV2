@@ -35,6 +35,13 @@ const requiredAppContracts = [
   ,"admin-workspace-panel"
   ,"admin-exercise-disclosure"
   ,"liquid-bottom-nav"
+  ,"fueling-cockpit"
+  ,"macro-pie-card"
+  ,"remaining-nutrition-card"
+  ,"nutrition-entry-item"
+  ,"nutrition-entry-sheet"
+  ,"saved-meal-row"
+  ,"admin-nutrition-targets"
 ];
 
 for (const contract of requiredAppContracts) {
@@ -60,6 +67,9 @@ const requiredCssContracts = [
   ,".admin-workspace-tabs"
   ,".liquid-bottom-nav"
   ,"@keyframes screenIn"
+  ,".macro-pie-card"
+  ,".nutrition-entry-item"
+  ,".saved-meal-row"
 ];
 
 for (const contract of requiredCssContracts) {
@@ -87,9 +97,16 @@ assert.match(app, /data-motion-progress=/, "Progress indicators must expose boun
 assert.match(css, /--motion-standard:\s*200ms/, "The V3 motion timing must be centralized");
 assert.match(css, /\.motion-screen-enter/, "Screen entrances must be opt-in rather than replaying every render");
 assert.doesNotMatch(css, /\.app-main\s*\{\s*animation:/, "The app shell must not animate on every state render");
-assert.match(index, /styles\.css\?v=25/, "The app shell must request the v25 motion CSS");
-assert.match(index, /app\.js\?v=25/, "The app shell must request the v25 motion JS");
-assert.match(worker, /mm-fitness-app-v25-performance-rhythm/, "The service worker cache must be bumped for motion assets");
+assert.match(index, /styles\.css\?v=26/, "The app shell must request the latest CSS");
+assert.match(index, /app\.js\?v=26/, "The app shell must request the latest JS");
+assert.match(worker, /mm-fitness-app-v26-nutrition-engine/, "The service worker cache must include the motion and nutrition assets");
 assert.match(worker, /motion\.js\?v=25/, "The service worker must cache the motion controller");
+assert.match(app, /nutritionEngine\.js\?v=26/, "Nutrition calculations must come from the centralized engine");
+assert.match(app, /mm-nutrition-entries/, "Nutrition entries must be included in the app snapshot");
+assert.match(app, /mm-saved-meals/, "Saved meals must be included in the app snapshot");
+assert.match(index, /styles\.css\?v=26/, "Nutrition UI must use the v26 CSS asset");
+assert.match(index, /app\.js\?v=26/, "Nutrition UI must use the v26 app asset");
+assert.match(worker, /mm-fitness-app-v26-nutrition-engine/, "The service worker cache must be bumped for the nutrition engine");
+assert.match(app, /data-remove-saved-meal/, "Saved meal templates must be removable from the nutrition library");
 
 console.log("Performance Instrument V3 UI contracts are present.");

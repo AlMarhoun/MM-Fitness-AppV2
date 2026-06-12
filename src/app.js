@@ -1,7 +1,7 @@
 import { authState, initAuth, signIn, signOut } from "./auth.js";
 import { loadAdminAthleteSnapshot, loadAdminDirectory, summarizeAthleteSnapshot } from "./adminData.js";
 import { activitiesForDate, activityCount, activityLabel, addActivity, removeActivity } from "./activities.js?v=19";
-import { dayHistory, monthCalendar } from "./history.js?v=19";
+import { dayHistory, monthCalendar } from "./history.js?v=26";
 import { aggregateVolumeTrend, createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js?v=18";
 import { buildProgressCockpitModel } from "./progressCockpit.js?v=21";
 import { buildReadinessModel } from "./readiness.js?v=24";
@@ -14,6 +14,7 @@ import { downloadLocalBackup, getSyncStatus, importLocalBackupFile, loadCloudSna
 import { clearSessionUi, persistWorkoutUiState, readSessionUi, shouldResumeActiveWorkout } from "./sessionPersistence.js";
 import { savePlanToCloud } from "./sync.js";
 import { applyPerformanceMotion } from "./motion.js?v=25";
+import { activeNutritionEntries, calculateDailyNutritionTotals, calculateEntryCalories, calculateMacroPercentages, calculateNutritionCompletion, calculateRemainingNutrition, createNutritionEntry, entryFromSavedMeal, nutritionTargets, validateNutritionEntry } from "./nutritionEngine.js?v=26";
 
 const PLAN = {
   title: "MM Hybrid: Fat Loss + Padel Performance + Athletic Physique",
@@ -135,6 +136,8 @@ const state = {
   logs: read("mm-daily-logs", {}),
   workoutLogs: read("mm-workout-logs", {}),
   nutritionLogs: read("mm-nutrition-logs", {}),
+  nutritionEntries: read("mm-nutrition-entries", {}),
+  savedMeals: read("mm-saved-meals", []),
   padelLogs: read("mm-padel-logs", {}),
   activityLogs: read("mm-activity-logs", {}),
   plan: read("mm-plan", PLAN),
@@ -142,6 +145,8 @@ const state = {
   activeCursor: initialSessionUi.activeCursor || null,
   lastWorkoutSummary: null,
   historySelectedDate: initialSessionUi.historySelectedDate || todayStr(),
+  nutritionSelectedDate: todayStr(),
+  nutritionEntryDraft: null,
   strengthPeriod: read("mm-strength-period", "daily"),
   adminSection: "users",
   auth: { ...authState },
@@ -183,6 +188,8 @@ function appSnapshot() {
       "mm-daily-logs": state.logs,
       "mm-workout-logs": state.workoutLogs,
       "mm-nutrition-logs": state.nutritionLogs,
+      "mm-nutrition-entries": state.nutritionEntries,
+      "mm-saved-meals": state.savedMeals,
       "mm-padel-logs": state.padelLogs,
       "mm-activity-logs": state.activityLogs,
       "mm-plan": state.plan,
@@ -198,6 +205,8 @@ function hydrateFromSnapshot(snapshot) {
   state.logs = data["mm-daily-logs"] || state.logs;
   state.workoutLogs = data["mm-workout-logs"] || state.workoutLogs;
   state.nutritionLogs = data["mm-nutrition-logs"] || state.nutritionLogs;
+  state.nutritionEntries = data["mm-nutrition-entries"] || state.nutritionEntries;
+  state.savedMeals = data["mm-saved-meals"] || state.savedMeals;
   state.padelLogs = data["mm-padel-logs"] || state.padelLogs;
   state.activityLogs = data["mm-activity-logs"] || state.activityLogs;
   state.plan = data["mm-plan"] || state.plan;
@@ -206,6 +215,8 @@ function hydrateFromSnapshot(snapshot) {
   write("mm-daily-logs", state.logs);
   write("mm-workout-logs", state.workoutLogs);
   write("mm-nutrition-logs", state.nutritionLogs);
+  write("mm-nutrition-entries", state.nutritionEntries);
+  write("mm-saved-meals", state.savedMeals);
   write("mm-padel-logs", state.padelLogs);
   write("mm-activity-logs", state.activityLogs);
   write("mm-plan", state.plan);
@@ -219,6 +230,8 @@ function saveAll() {
   write("mm-daily-logs", state.logs);
   write("mm-workout-logs", state.workoutLogs);
   write("mm-nutrition-logs", state.nutritionLogs);
+  write("mm-nutrition-entries", state.nutritionEntries);
+  write("mm-saved-meals", state.savedMeals);
   write("mm-padel-logs", state.padelLogs);
   write("mm-activity-logs", state.activityLogs);
   write("mm-plan", state.plan);
@@ -290,6 +303,11 @@ function dateFrom(str) { return new Date(`${str}T12:00:00`); }
 function dayName(str) { return DAYS[dateFrom(str).getDay()]; }
 function fmtDate(str = todayStr()) {
   return dateFrom(str).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+function shiftDate(str, days) {
+  const date = dateFrom(str);
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 function weekStart(str = todayStr()) {
   const d = dateFrom(str);
@@ -817,6 +835,7 @@ function HistoryCalendar() {
     workoutLogs: state.workoutLogs,
     dailyLogs: state.logs,
     nutritionLogs: state.nutritionLogs,
+    nutritionEntries: state.nutritionEntries,
     padelLogs: state.padelLogs,
     activityLogs: state.activityLogs,
     plan: state.plan
@@ -824,6 +843,7 @@ function HistoryCalendar() {
   const cells = monthCalendar(state.historySelectedDate, {
     workoutLogs: state.workoutLogs,
     nutritionLogs: state.nutritionLogs,
+    nutritionEntries: state.nutritionEntries,
     padelLogs: state.padelLogs,
     activityLogs: state.activityLogs,
     plan: state.plan
@@ -864,6 +884,7 @@ function HistoryDaySummary(history) {
   const summary = history.workoutSummary;
   const log = history.dailyLog || {};
   const nutrition = history.nutrition || {};
+  const nutritionTotals = calculateDailyNutritionTotals(history.nutritionEntries || [], nutrition);
   const padel = history.padel || {};
   const activities = history.activities || [];
   const dayStatus = summary ? "Workout complete" : history.status.missed ? "Scheduled session missed" : activities.length || nutrition.adhered || log.bodyWeight ? "Activity logged" : "No activity logged";
@@ -878,7 +899,7 @@ function HistoryDaySummary(history) {
     <div class="activity-timeline">
       <div class="timeline-item primary"><i></i><div><span>Workout</span><strong>${summary ? esc(summary.workoutName) : history.status.missed ? "Missed / not logged" : "No workout"}</strong></div></div>
       ${activities.map((activity) => `<div class="timeline-item"><i class="${activity.type}"></i><div><span>${activityLabel(activity.type)}</span><strong>${activity.duration || 0} min · ${esc(activity.intensity || "moderate")}</strong></div></div>`).join("")}
-      <div class="timeline-item"><i class="nutrition"></i><div><span>Nutrition</span><strong>${nutrition.adhered ? esc(nutrition.adhered) : "Not logged"}</strong></div></div>
+      <div class="timeline-item"><i class="nutrition"></i><div><span>Nutrition</span><strong>${nutritionTotals.entryCount ? `${nutritionTotals.entryCount} entries · ${Math.round(nutritionTotals.calories)} kcal` : nutrition.adhered ? esc(nutrition.adhered) : "Not logged"}</strong><button class="timeline-action" data-action="history-add-nutrition">${nutritionTotals.entryCount ? "Review / add" : "Add nutrition"}</button></div></div>
       <div class="timeline-item"><i class="body"></i><div><span>Body</span><strong>${log.bodyWeight ? `${log.bodyWeight} kg${log.waist ? ` · ${log.waist} cm` : ""}` : "Not logged"}</strong></div></div>
     </div>
     ${summary ? `
@@ -933,40 +954,77 @@ function Adherence(field, value) {
   return `<div class="segmented">${["yes", "partial", "no"].map((v) => `<button class="${value === v ? "active" : ""}" data-adherence="${field}" data-value="${v}">${v === "yes" ? "Yes" : v === "partial" ? "Partial" : "No"}</button>`).join("")}</div>`;
 }
 function Nutrition() {
-  const d = todayPlan();
-  const nl = state.nutritionLogs[todayStr()] || {};
-  const caloriePct = pct(Number(nl.actualCalories || 0), Number(d.calories || 0));
-  return `${Header("Nutrition", `${d.nutritionType} day · ${fmtDate()}`)}
-    <section class="nutrition-cockpit">
-      <div class="nutrition-head"><div><div class="eyebrow">Daily Fueling</div><h1>${d.nutritionType} Day</h1><p>${nl.actualCalories ? `${Math.max(0, d.calories - Number(nl.actualCalories))} kcal remaining` : "Log intake to track today"}</p></div><div class="calorie-ring" style="--progress:${caloriePct}%"><strong>${caloriePct}%</strong><span>${nl.actualCalories || 0} / ${d.calories}</span></div></div>
+  const date = state.nutritionSelectedDate || todayStr();
+  const d = nutritionPlanForDate(date);
+  const nl = state.nutritionLogs[date] || {};
+  const entries = activeNutritionEntries(state.nutritionEntries[date] || []);
+  const targets = nutritionTargets(d, nl);
+  const totals = calculateDailyNutritionTotals(entries, nl);
+  const remaining = calculateRemainingNutrition(targets, totals);
+  const completion = calculateNutritionCompletion(targets, totals);
+  const distribution = calculateMacroPercentages(totals);
+  return `${Header("Nutrition", `${d.nutritionType || "Fuel"} day · ${fmtDate(date)}`)}
+    <section class="nutrition-date-command">
+      <button class="icon-action" data-action="nutrition-prev-day" aria-label="Previous nutrition day">‹</button>
+      <label><span>Fueling date</span><input type="date" value="${date}" data-nutrition-date /></label>
+      <button class="icon-action" data-action="nutrition-next-day" aria-label="Next nutrition day">›</button>
+    </section>
+    <section class="nutrition-cockpit fueling-cockpit">
+      <div class="nutrition-head"><div><div class="eyebrow">Daily Fueling</div><h1>${esc(d.nutritionType || "Custom")} Day</h1><p>${NutritionRemainingLabel(remaining.calories, totals.entryCount || totals.source === "legacy")}</p></div><div class="calorie-ring ${completion.calories > 100 ? "over" : ""}" style="--progress:${Math.min(100, completion.calories)}%"><strong>${completion.calories}%</strong><span>${Math.round(totals.calories)} / ${Math.round(targets.calories)}</span></div></div>
       <div class="macro-instrument-grid">
-        ${MacroInstrument("Protein", nl.actualProtein, d.protein, "P")}
-        ${MacroInstrument("Carbs", nl.actualCarbs, d.carbs, "C")}
-        ${MacroInstrument("Fats", nl.actualFats, d.fats, "F")}
+        ${MacroInstrument("Protein", totals.protein, targets.protein, "P", completion.protein)}
+        ${MacroInstrument("Carbs", totals.carbs, targets.carbs, "C", completion.carbs)}
+        ${MacroInstrument("Fat", totals.fat, targets.fat, "F", completion.fat)}
       </div>
-      <div class="fueling-context"><span class="chip warning">${d.nutritionType}</span><span>${d.category || "Training"} context</span><span>Fiber 30g+</span></div>
+      <div class="fueling-context"><span class="chip warning">${esc(d.nutritionType || "CUSTOM")}</span><span>${esc(d.category || "Daily fueling")} context</span>${totals.source === "legacy" ? `<span class="chip">Legacy totals</span>` : `<span>${entries.length} ${entries.length === 1 ? "entry" : "entries"}</span>`}</div>
+    </section>
+    <section class="nutrition-intelligence-grid section-gap">
+      ${MacroPieChart(distribution, totals)}
+      ${RemainingNutritionCard(remaining)}
+    </section>
+    <section class="nutrition-entry-list section-gap">
+      <div class="instrument-section-head"><div><div class="eyebrow">Daily Entries</div><div class="card-title">Meals, Snacks & Beverages</div></div><button class="mini-btn" data-action="open-saved-meals">Saved Meals</button></div>
+      ${entries.length ? entries.map((entry) => NutritionEntryCard(entry)).join("") : `<div class="empty-performance-state nutrition-empty"><span>${icon("nutrition")}</span><div><strong>No entries for this date</strong><p>Add a meal, snack, beverage, or one of your saved meals.</p></div></div>`}
+      <button class="btn btn-primary nutrition-add-entry" data-action="add-nutrition-entry">Add Food or Saved Meal</button>
     </section>
     <section class="form-card section-gap nutrition-adherence-card">
       <div><div class="eyebrow">Daily Status</div><div class="card-title">Adherence</div></div>
       ${Adherence("nutrition", nl.adhered)}
     </section>
-    <section class="form-card section-gap nutrition-entry-card">
-      <div><div class="eyebrow">Fuel Log</div><div class="card-title">Actual Intake</div></div>
-      <div class="grid-2">
-        ${NutritionField("Calories", "actualCalories", nl.actualCalories)}
-        ${NutritionField("Protein", "actualProtein", nl.actualProtein)}
-        ${NutritionField("Carbs", "actualCarbs", nl.actualCarbs)}
-        ${NutritionField("Fats", "actualFats", nl.actualFats)}
-      </div>
-      <div class="field"><label>Notes</label><textarea data-nutrition="notes" placeholder="Nutrition notes">${nl.notes || ""}</textarea></div>
+    <section class="form-card section-gap nutrition-notes-card">
+      <div><div class="eyebrow">Daily Notes</div><div class="card-title">Fueling Context</div></div>
+      <div class="field"><label>Notes</label><textarea data-nutrition="notes" data-nutrition-date-value="${date}" placeholder="Nutrition notes">${esc(nl.notes || "")}</textarea></div>
+      ${totals.source === "legacy" ? `<details class="legacy-nutrition"><summary>Legacy daily totals</summary><div class="grid-2">${NutritionField("Calories", "actualCalories", nl.actualCalories, date)}${NutritionField("Protein", "actualProtein", nl.actualProtein, date)}${NutritionField("Carbs", "actualCarbs", nl.actualCarbs, date)}${NutritionField("Fats", "actualFats", nl.actualFats, date)}</div></details>` : ""}
     </section>`;
 }
-function MacroInstrument(label, actual, target, mark) {
-  const progress = pct(Number(actual || 0), Number(target || 0));
-  return `<div class="macro-instrument"><span>${mark}</span><strong>${actual || "—"}<small> / ${target}g</small></strong><em>${label}</em><div class="rail"><i style="--pct:${progress}%"></i></div></div>`;
+function nutritionPlanForDate(date) {
+  return state.plan.days.find((day) => day.day === dayName(date)) || todayPlan();
 }
-function NutritionField(label, field, value) {
-  return `<div class="field"><label>${label}</label><input class="input" type="number" data-nutrition="${field}" placeholder="0" value="${value || ""}" /></div>`;
+function NutritionRemainingLabel(value, hasData) {
+  if (!hasData) return "Log intake to track today";
+  return value >= 0 ? `${Math.round(value)} kcal remaining` : `+${Math.abs(Math.round(value))} kcal over`;
+}
+function MacroInstrument(label, actual, target, mark, progress = pct(Number(actual || 0), Number(target || 0))) {
+  const over = Number(actual || 0) > Number(target || 0);
+  return `<div class="macro-instrument ${over ? "over" : ""}"><span>${mark}</span><strong>${Math.round(actual || 0)}<small> / ${Math.round(target || 0)}g</small></strong><em>${label}${over ? ` · +${Math.round(actual - target)}g` : ""}</em><div class="rail"><i style="--pct:${Math.min(100, progress)}%"></i></div></div>`;
+}
+function MacroPieChart(distribution, totals) {
+  if (!distribution.calories.total) return `<article class="macro-pie-card"><div class="eyebrow">Macro Distribution</div><div class="empty small">Add macros to reveal your calorie distribution.</div></article>`;
+  const proteinStop = distribution.protein;
+  const carbsStop = distribution.protein + distribution.carbs;
+  return `<article class="macro-pie-card"><div class="eyebrow">Macro Distribution</div><div class="macro-pie-layout"><div class="macro-pie" style="--protein:${proteinStop}%;--carbs:${carbsStop}%"><span>${Math.round(distribution.calories.total)}<small>macro kcal</small></span></div><div class="macro-pie-legend"><div><i class="protein"></i><span>Protein</span><strong>${distribution.protein}% · ${Math.round(totals.protein)}g</strong><small>${Math.round(distribution.calories.protein)} kcal</small></div><div><i class="carbs"></i><span>Carbs</span><strong>${distribution.carbs}% · ${Math.round(totals.carbs)}g</strong><small>${Math.round(distribution.calories.carbs)} kcal</small></div><div><i class="fat"></i><span>Fat</span><strong>${distribution.fat}% · ${Math.round(totals.fat)}g</strong><small>${Math.round(distribution.calories.fat)} kcal</small></div></div></div></article>`;
+}
+function RemainingNutritionCard(remaining) {
+  const item = (label, value, unit) => `<div class="remaining-metric ${value < 0 ? "over" : value === 0 ? "reached" : ""}"><span>${label}</span><strong>${value < 0 ? `+${Math.abs(Math.round(value))}` : Math.round(value)}${unit}</strong><small>${value < 0 ? "over" : value === 0 ? "target reached" : "left"}</small></div>`;
+  return `<article class="remaining-nutrition-card"><div class="eyebrow">Remaining Today</div><div class="remaining-nutrition-grid">${item("Calories", remaining.calories, " kcal")}${item("Protein", remaining.protein, "g")}${item("Carbs", remaining.carbs, "g")}${item("Fat", remaining.fat, "g")}</div></article>`;
+}
+function NutritionEntryCard(entry) {
+  const calories = calculateEntryCalories(entry);
+  const symbols = { meal: "M", snack: "S", beverage: "B" };
+  return `<article class="nutrition-entry-item"><span class="nutrition-entry-type ${entry.type}">${symbols[entry.type] || "M"}</span><div class="nutrition-entry-copy"><div><span class="chip">${esc(entry.type)}</span>${entry.time ? `<small>${esc(entry.time)}</small>` : ""}</div><strong>${esc(entry.name)}</strong><p>${Math.round(entry.protein)}P · ${Math.round(entry.carbs)}C · ${Math.round(entry.fat)}F${entry.notes ? ` · ${esc(entry.notes)}` : ""}</p></div><div class="nutrition-entry-value"><strong>${Math.round(calories)}</strong><small>${entry.calorieMode === "manual" ? "manual kcal" : "auto kcal"}</small><div><button class="icon-action" data-nutrition-edit="${entry.id}" aria-label="Edit ${esc(entry.name)}">✎</button><button class="icon-action" data-nutrition-duplicate="${entry.id}" aria-label="Duplicate ${esc(entry.name)}">＋</button><button class="icon-action danger" data-nutrition-delete="${entry.id}" aria-label="Delete ${esc(entry.name)}">×</button></div></div></article>`;
+}
+function NutritionField(label, field, value, date = state.nutritionSelectedDate) {
+  return `<div class="field"><label>${label}</label><input class="input" type="number" data-nutrition="${field}" data-nutrition-date-value="${date}" placeholder="0" value="${value || ""}" /></div>`;
 }
 function Progress() {
   const performance = summarizeProgress(state.workoutLogs, state.plan);
@@ -1386,6 +1444,15 @@ function AdminPlanDayEditor(day, dayIdx) {
       ${AdminPlanField("Duration", dayIdx, "duration", day.duration || 0, "number")}
       ${AdminPlanField("Calories", dayIdx, "calories", day.calories || 0, "number")}
     </div>
+    <div class="admin-nutrition-targets">
+      <div class="eyebrow">Athlete Macro Targets</div>
+      <div class="nutrition-macro-inputs">
+        ${AdminPlanField("Protein g", dayIdx, "protein", day.protein || 0, "number")}
+        ${AdminPlanField("Carbs g", dayIdx, "carbs", day.carbs || 0, "number")}
+        ${AdminPlanField("Fat g", dayIdx, "fats", day.fats || 0, "number")}
+      </div>
+      <p class="day-meta">Targets apply to future days using this plan. Historical nutrition logs keep their captured targets.</p>
+    </div>
     <div class="field"><label>Session Goal</label><textarea data-admin-plan-field="${dayIdx}" data-field="goal">${esc(day.goal || "")}</textarea></div>
     <div class="field"><label>Nutrition Day Type</label>
       <div class="segmented">${["HIGH","MED","LOW"].map((type) => `<button class="${day.nutritionType === type ? "active" : ""}" data-admin-nutrition="${dayIdx}" data-type="${type}">${type}</button>`).join("")}</div>
@@ -1494,6 +1561,94 @@ function Modal() {
       </div>`}
     </div>
   </div>`;
+}
+function openNutritionEntrySheet(mode = "saved", entryId = "") {
+  const date = state.nutritionSelectedDate || todayStr();
+  const existing = (state.nutritionEntries[date] || []).find((entry) => entry.id === entryId && !entry.isDeleted);
+  state.nutritionEntryDraft = existing ? { ...existing } : null;
+  state.modal = {
+    title: existing ? "Edit Nutrition Entry" : "Add Nutrition",
+    bodyHtml: NutritionEntrySheet(mode, existing),
+    hideActions: true,
+    className: "nutrition-entry-sheet"
+  };
+  render();
+}
+function NutritionEntrySheet(mode = "saved", entry = null) {
+  const date = state.nutritionSelectedDate || todayStr();
+  const saved = state.savedMeals.filter((item) => !item.isDeleted);
+  const recent = Object.entries(state.nutritionEntries).sort(([a], [b]) => b.localeCompare(a)).flatMap(([, items]) => activeNutritionEntries(items)).slice(0, 8);
+  const list = mode === "recent" ? recent : saved;
+  const formEntry = entry || { type: "meal", name: "", time: "", protein: "", carbs: "", fat: "", calorieMode: "auto", manualCalories: "", notes: "" };
+  return `<div class="nutrition-sheet-body">
+    <div class="nutrition-sheet-date">Add to <strong>${fmtDate(date)}</strong><button class="icon-action" data-action="close-modal" aria-label="Close">×</button></div>
+    ${entry ? "" : `<div class="nutrition-sheet-tabs"><button class="${mode === "saved" ? "active" : ""}" data-action="nutrition-tab-saved">Saved</button><button class="${mode === "recent" ? "active" : ""}" data-action="nutrition-tab-recent">Recent</button><button class="${mode === "new" ? "active" : ""}" data-action="nutrition-tab-new">New Entry</button></div>`}
+    ${!entry && mode !== "new" ? `<div class="saved-meal-list">${list.length ? list.map((item) => SavedMealRow(item, mode)).join("") : `<div class="empty small">${mode === "saved" ? "No saved meals yet. Create an entry and choose Save to library." : "No recent nutrition entries yet."}</div>`}</div>` : NutritionEntryForm(formEntry, !!entry)}
+  </div>`;
+}
+function SavedMealRow(item, source) {
+  return `<article class="saved-meal-row"><div><span class="chip">${esc(item.type || "meal")}</span><strong>${esc(item.name)}</strong><small>${Math.round(item.protein || 0)}P · ${Math.round(item.carbs || 0)}C · ${Math.round(item.fat || 0)}F · ${Math.round(calculateEntryCalories(item))} kcal</small></div><div class="saved-meal-actions"><button class="saved-meal-add" data-add-saved-meal="${item.id}" data-saved-source="${source}" aria-label="Add ${esc(item.name)}">+</button>${source === "saved" ? `<button class="saved-meal-remove" data-remove-saved-meal="${item.id}" aria-label="Remove saved meal ${esc(item.name)}">×</button>` : ""}</div></article>`;
+}
+function NutritionEntryForm(entry, editing = false) {
+  const autoCalories = calculateEntryCalories({ ...entry, calorieMode: "auto" });
+  return `<div class="nutrition-entry-form">
+    <div class="field"><label>Entry Type</label><div class="segmented nutrition-type-select">${["meal","snack","beverage"].map((type) => `<button class="${entry.type === type ? "active" : ""}" data-nutrition-type="${type}">${type[0].toUpperCase() + type.slice(1)}</button>`).join("")}</div></div>
+    <input type="hidden" data-nutrition-entry-field="type" value="${esc(entry.type || "meal")}" />
+    <div class="grid-2"><div class="field"><label>Name</label><input class="input" data-nutrition-entry-field="name" value="${esc(entry.name || "")}" placeholder="Breakfast" /></div><div class="field"><label>Time</label><input class="input" type="time" data-nutrition-entry-field="time" value="${esc(entry.time || "")}" /></div></div>
+    <div class="nutrition-macro-inputs"><div class="field"><label>Protein g</label><input class="input" type="number" min="0" step="0.1" data-nutrition-entry-field="protein" value="${entry.protein ?? ""}" /></div><div class="field"><label>Carbs g</label><input class="input" type="number" min="0" step="0.1" data-nutrition-entry-field="carbs" value="${entry.carbs ?? ""}" /></div><div class="field"><label>Fat g</label><input class="input" type="number" min="0" step="0.1" data-nutrition-entry-field="fat" value="${entry.fat ?? ""}" /></div></div>
+    <div class="calorie-mode-card"><div><span>Calculated calories</span><strong data-nutrition-auto-calories>${Math.round(autoCalories)} kcal</strong></div><div class="field"><label>Manual calories (optional)</label><input class="input" type="number" min="0" data-nutrition-entry-field="manualCalories" value="${entry.calorieMode === "manual" ? entry.manualCalories ?? "" : ""}" placeholder="Auto" /></div><button class="mini-btn" data-action="nutrition-use-auto">Use Macro Calculation</button><small data-nutrition-calorie-status>${entry.calorieMode === "manual" ? "Manual override active" : "Calories update automatically from macros"}</small></div>
+    <div class="field"><label>Notes</label><textarea data-nutrition-entry-field="notes" placeholder="Optional notes">${esc(entry.notes || "")}</textarea></div>
+    <label class="save-meal-toggle"><input type="checkbox" data-save-meal-template ${editing ? "" : ""}/><span>Save this as a reusable meal</span></label>
+    <div class="nutrition-sheet-actions"><button class="btn btn-secondary" data-action="close-modal">Cancel</button><button class="btn btn-primary" data-action="save-nutrition-entry" data-entry-id="${entry.id || ""}">${editing ? "Save Changes" : "Add Entry"}</button></div>
+  </div>`;
+}
+function ensureNutritionDayLog(date) {
+  const day = nutritionPlanForDate(date);
+  const current = state.nutritionLogs[date] || {};
+  state.nutritionLogs[date] = {
+    ...current,
+    targetCalories: current.targetCalories ?? day.calories,
+    targetProtein: current.targetProtein ?? day.protein,
+    targetCarbs: current.targetCarbs ?? day.carbs,
+    targetFat: current.targetFat ?? day.fats
+  };
+  return state.nutritionLogs[date];
+}
+function readNutritionEntryForm() {
+  const value = (field) => document.querySelector(`[data-nutrition-entry-field='${field}']`)?.value ?? "";
+  const manual = value("manualCalories");
+  return {
+    type: value("type") || "meal",
+    name: value("name"),
+    time: value("time"),
+    protein: value("protein"),
+    carbs: value("carbs"),
+    fat: value("fat"),
+    calorieMode: manual === "" ? "auto" : "manual",
+    manualCalories: manual,
+    notes: value("notes")
+  };
+}
+function saveNutritionEntry(entryId = "") {
+  const date = state.nutritionSelectedDate || todayStr();
+  const input = readNutritionEntryForm();
+  const validation = validateNutritionEntry(input);
+  if (!validation.valid) return toast(validation.errors[0]);
+  const existing = (state.nutritionEntries[date] || []).find((item) => item.id === entryId);
+  const entry = createNutritionEntry({ ...existing, ...input, createdAt: existing?.createdAt }, existing?.id || undefined);
+  state.nutritionEntries[date] = existing
+    ? state.nutritionEntries[date].map((item) => item.id === existing.id ? entry : item)
+    : [...(state.nutritionEntries[date] || []), entry];
+  ensureNutritionDayLog(date);
+  if (document.querySelector("[data-save-meal-template]")?.checked) {
+    const template = createNutritionEntry({ ...entry, createdAt: undefined }, `meal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    state.savedMeals = [...state.savedMeals, template];
+  }
+  state.modal = null;
+  state.nutritionEntryDraft = null;
+  saveAll();
+  toast(existing ? "Nutrition entry updated" : "Nutrition entry added");
+  render();
 }
 function openActivityModal(date = todayStr(), preferredType = "padel") {
   const planned = state.plan.days.find((day) => day.day === dayName(date));
@@ -1658,6 +1813,53 @@ function bind() {
     state.historySelectedDate = el.dataset.historyDate;
     render();
   }));
+  document.querySelectorAll("[data-nutrition-date]").forEach((el) => el.addEventListener("change", () => {
+    state.nutritionSelectedDate = el.value || todayStr();
+    render();
+  }));
+  document.querySelectorAll("[data-nutrition-edit]").forEach((el) => el.addEventListener("click", () => openNutritionEntrySheet("new", el.dataset.nutritionEdit)));
+  document.querySelectorAll("[data-nutrition-duplicate]").forEach((el) => el.addEventListener("click", () => {
+    const date = state.nutritionSelectedDate || todayStr();
+    const source = (state.nutritionEntries[date] || []).find((item) => item.id === el.dataset.nutritionDuplicate);
+    if (!source) return;
+    state.nutritionEntries[date] = [...(state.nutritionEntries[date] || []), createNutritionEntry({ ...source, name: `${source.name} copy`, createdAt: undefined })];
+    ensureNutritionDayLog(date); saveAll(); toast("Entry duplicated"); render();
+  }));
+  document.querySelectorAll("[data-nutrition-delete]").forEach((el) => el.addEventListener("click", () => {
+    const date = state.nutritionSelectedDate || todayStr();
+    state.nutritionEntries[date] = (state.nutritionEntries[date] || []).map((item) => item.id === el.dataset.nutritionDelete ? { ...item, isDeleted: true, updatedAt: new Date().toISOString() } : item);
+    saveAll(); toast("Nutrition entry removed"); render();
+  }));
+  document.querySelectorAll("[data-add-saved-meal]").forEach((el) => el.addEventListener("click", () => {
+    const sourceList = el.dataset.savedSource === "recent"
+      ? Object.values(state.nutritionEntries).flat().filter((item) => !item.isDeleted)
+      : state.savedMeals;
+    const saved = sourceList.find((item) => item.id === el.dataset.addSavedMeal && !item.isDeleted);
+    if (!saved) return;
+    const date = state.nutritionSelectedDate || todayStr();
+    state.nutritionEntries[date] = [...(state.nutritionEntries[date] || []), entryFromSavedMeal(saved)];
+    ensureNutritionDayLog(date); state.modal = null; saveAll(); toast(`${saved.name} added`); render();
+  }));
+  document.querySelectorAll("[data-remove-saved-meal]").forEach((el) => el.addEventListener("click", () => {
+    state.savedMeals = state.savedMeals.map((item) => item.id === el.dataset.removeSavedMeal
+      ? { ...item, isDeleted: true, updatedAt: new Date().toISOString() }
+      : item);
+    saveAll();
+    toast("Saved meal removed");
+    openNutritionEntrySheet("saved");
+  }));
+  document.querySelectorAll("[data-nutrition-type]").forEach((el) => el.addEventListener("click", () => {
+    document.querySelector("[data-nutrition-entry-field='type']").value = el.dataset.nutritionType;
+    document.querySelectorAll("[data-nutrition-type]").forEach((button) => button.classList.toggle("active", button === el));
+  }));
+  document.querySelectorAll("[data-nutrition-entry-field='protein'],[data-nutrition-entry-field='carbs'],[data-nutrition-entry-field='fat'],[data-nutrition-entry-field='manualCalories']").forEach((el) => el.addEventListener("input", () => {
+    const input = readNutritionEntryForm();
+    const autoCalories = calculateEntryCalories({ ...input, calorieMode: "auto" });
+    const auto = document.querySelector("[data-nutrition-auto-calories]");
+    const status = document.querySelector("[data-nutrition-calorie-status]");
+    if (auto) auto.textContent = `${Math.round(autoCalories)} kcal`;
+    if (status) status.textContent = input.calorieMode === "manual" ? "Manual override active" : "Calories update automatically from macros";
+  }));
   document.querySelectorAll("[data-remove-activity]").forEach((el) => el.addEventListener("click", () => {
     state.activityLogs = removeActivity(state.activityLogs, el.dataset.activityDate, el.dataset.removeActivity);
     saveAll();
@@ -1687,15 +1889,15 @@ function bind() {
     saveAll(); render();
   }));
   document.querySelectorAll("[data-adherence]").forEach((el) => el.addEventListener("click", () => {
-    const today = todayStr();
-    if (el.dataset.adherence === "nutrition") state.nutritionLogs[today] = { ...(state.nutritionLogs[today] || {}), adhered: el.dataset.value };
+    const today = el.dataset.adherence === "nutrition" ? (state.nutritionSelectedDate || todayStr()) : todayStr();
+    if (el.dataset.adherence === "nutrition") state.nutritionLogs[today] = { ...ensureNutritionDayLog(today), adhered: el.dataset.value };
     else state.logs[today] = { ...(state.logs[today] || {}), [el.dataset.adherence]: el.dataset.value };
     saveAll(); render();
   }));
   document.querySelectorAll("[data-nutrition]").forEach((el) => el.addEventListener("input", () => {
-    const today = todayStr();
+    const today = el.dataset.nutritionDateValue || state.nutritionSelectedDate || todayStr();
     const val = el.type === "number" ? (el.value === "" ? null : Number(el.value)) : el.value;
-    state.nutritionLogs[today] = { ...(state.nutritionLogs[today] || {}), [el.dataset.nutrition]: val };
+    state.nutritionLogs[today] = { ...ensureNutritionDayLog(today), [el.dataset.nutrition]: val };
     saveAll();
   }));
   document.querySelectorAll("[data-set]").forEach((el) => el.addEventListener("input", () => {
@@ -1876,6 +2078,30 @@ function bind() {
   manageTimer();
 }
 async function handleAction(action) {
+  if (action === "nutrition-prev-day" || action === "nutrition-next-day") {
+    state.nutritionSelectedDate = shiftDate(state.nutritionSelectedDate || todayStr(), action === "nutrition-prev-day" ? -1 : 1);
+    render();
+  }
+  if (action === "history-add-nutrition") {
+    state.nutritionSelectedDate = state.historySelectedDate || todayStr();
+    state.screen = "nutrition";
+    render();
+  }
+  if (action === "add-nutrition-entry") openNutritionEntrySheet(state.savedMeals.some((item) => !item.isDeleted) ? "saved" : "new");
+  if (action === "open-saved-meals" || action === "nutrition-tab-saved") openNutritionEntrySheet("saved");
+  if (action === "nutrition-tab-recent") openNutritionEntrySheet("recent");
+  if (action === "nutrition-tab-new") openNutritionEntrySheet("new");
+  if (action === "close-modal") { state.modal = null; state.nutritionEntryDraft = null; render(); }
+  if (action === "nutrition-use-auto") {
+    const manual = document.querySelector("[data-nutrition-entry-field='manualCalories']");
+    const status = document.querySelector("[data-nutrition-calorie-status]");
+    if (manual) manual.value = "";
+    if (status) status.textContent = "Calories update automatically from macros";
+  }
+  if (action === "save-nutrition-entry") {
+    const button = document.querySelector("[data-action='save-nutrition-entry']");
+    saveNutritionEntry(button?.dataset.entryId || "");
+  }
   if (action === "theme") {
     state.theme = state.theme === "dark" ? "light" : "dark";
     write("mm-theme", state.theme);

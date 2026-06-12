@@ -132,3 +132,14 @@ Passed:
 - Motion timing, stagger, progress bounds, screen gating, and reduced-motion tests
 
 No business logic, data schema, storage keys, Supabase calls, Auth, RLS, or role/permission behavior changed.
+
+# Nutrition Engine Regression - June 13, 2026
+
+- Automatic 4/4/9 calorie calculations passed.
+- Manual calorie override and return-to-auto behavior passed.
+- Add, edit, duplicate, soft delete, saved meal, recent entry, and historical-date reuse contracts passed.
+- Legacy day-level nutrition logs remain readable when no entries exist.
+- Target-only logs correctly remain an empty intake state.
+- History receives dated entry totals without changing workout history behavior.
+- Admin athlete macro targets reuse the current plan editor.
+- Auth, roles, permissions, active workout, performance, profile crop, backup/import/export, and storage keys were preserved.

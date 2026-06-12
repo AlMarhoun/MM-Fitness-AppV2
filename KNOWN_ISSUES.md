@@ -85,3 +85,11 @@ No known syntax-level issues after Phase 1 verification.
 - Real iPhone Add to Home Screen motion smoothness still requires physical-device validation.
 - `prefers-reduced-motion` is implemented and automated-contract tested; final OS-level visual confirmation should be performed on iPhone.
 - Motion intentionally remains subtle in Admin and destructive confirmations; this is a safety choice, not a missing effect.
+
+## Nutrition Engine
+
+- Migration `007_nutrition_entries.sql` has not been applied. Entry-level cloud persistence and cross-device saved meals remain local/fallback until it is applied.
+- Live owner/admin/athlete/viewer RLS testing is required after migration 007.
+- Real iPhone Add to Home Screen entry-sheet reachability and keyboard behavior remain pending physical testing.
+- Existing sync conflict behavior is last-write-wins; simultaneous edits to the same entry on two offline devices need product-level conflict rules if that becomes a real use case.
+- Macro distribution always reflects calories derived from macro grams. When a manual calorie override is used, the daily calorie total may intentionally differ from the chart's macro-calorie total.

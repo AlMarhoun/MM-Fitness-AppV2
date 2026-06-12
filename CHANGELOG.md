@@ -336,3 +336,16 @@ Not changed:
 - Added `tests/motion.test.mjs` and strengthened V3 UI contracts.
 - Bumped the PWA cache to `mm-fitness-app-v25-performance-rhythm`.
 - No clone, commit, push, migration, or deployment action performed.
+
+# June 13, 2026 - Nutrition Fueling Cockpit (Codex Copy)
+
+- Added centralized `src/nutritionEngine.js` calculations with 4/4/9 calories, totals, remaining targets, completion, validation, and macro distribution.
+- Added dated meals, snacks, and beverages with add, edit, duplicate, soft delete, auto/manual calories, notes, and time.
+- Added reusable saved meals, recent-entry reuse, saved-meal removal, and historical-date logging.
+- Rebuilt Nutrition as a Fueling Cockpit with daily targets, consumed values, remaining values, percentages, macro pie, adherence, and notes.
+- Added athlete-specific calorie/protein/carbohydrate/fat targets to Admin Plans.
+- Added optional Supabase entry/saved-meal reads and sync while preserving local fallback before migration.
+- Added additive migration `007_nutrition_entries.sql`; it was not applied.
+- Added nutrition engine and UI contract tests.
+- Bumped static assets and service-worker cache to `mm-fitness-app-v26-nutrition-engine`.
+- No commit, push, deployment, or migration application was performed.

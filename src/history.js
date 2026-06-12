@@ -1,5 +1,6 @@
 import { activitiesForDate } from "./activities.js?v=19";
 import { bestExercisePerformance, detectExercisePrs, summarizeWorkoutSession } from "./performance.js?v=18";
+import { activeNutritionEntries } from "./nutritionEngine.js?v=26";
 
 function dateFrom(str) {
   return new Date(`${str}T12:00:00`);
@@ -34,9 +35,10 @@ export function monthCalendar(selectedDate, data) {
   });
 }
 
-export function dayStatus(date, { workoutLogs = {}, nutritionLogs = {}, padelLogs = {}, activityLogs = {}, plan }) {
+export function dayStatus(date, { workoutLogs = {}, nutritionLogs = {}, nutritionEntries = {}, padelLogs = {}, activityLogs = {}, plan }) {
   const workout = workoutLogs[date];
   const nutrition = nutritionLogs[date];
+  const entries = activeNutritionEntries(nutritionEntries[date] || []);
   const padel = padelLogs[date];
   const activities = activitiesForDate(activityLogs, date, padelLogs);
   const day = plan?.days?.[dateFrom(date).getDay()];
@@ -45,7 +47,7 @@ export function dayStatus(date, { workoutLogs = {}, nutritionLogs = {}, padelLog
 
   return {
     workoutCompleted: !!workout?.completed,
-    nutritionAdhered: nutrition?.adhered === "yes",
+    nutritionAdhered: nutrition?.adhered === "yes" || entries.length > 0,
     padelCompleted: activities.some((activity) => activity.completed && activity.type === "padel") || !!padel?.completed,
     swimmingCompleted: activities.some((activity) => activity.completed && activity.type === "swimming"),
     padelScheduled: !!day?.hasPadel,
@@ -55,7 +57,7 @@ export function dayStatus(date, { workoutLogs = {}, nutritionLogs = {}, padelLog
 }
 
 export function dayHistory(date, data) {
-  const { workoutLogs = {}, dailyLogs = {}, nutritionLogs = {}, padelLogs = {}, activityLogs = {}, plan } = data;
+  const { workoutLogs = {}, dailyLogs = {}, nutritionLogs = {}, nutritionEntries = {}, padelLogs = {}, activityLogs = {}, plan } = data;
   const workout = workoutLogs[date] || null;
   const workoutSummary = workout?.completed ? summarizeWorkoutSession({ ...workout, date: workout.date || date }, plan) : null;
   const prs = [];
@@ -78,6 +80,7 @@ export function dayHistory(date, data) {
     prs,
     dailyLog: dailyLogs[date] || null,
     nutrition: nutritionLogs[date] || null,
+    nutritionEntries: activeNutritionEntries(nutritionEntries[date] || []),
     padel: padelLogs[date] || null,
     activities: activitiesForDate(activityLogs, date, padelLogs)
   };

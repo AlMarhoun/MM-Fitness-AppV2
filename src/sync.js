@@ -120,10 +120,49 @@ export function cloudDatasetToSnapshot(dataset, fallback = {}) {
       actualProtein: row.actual_protein,
       actualCarbs: row.actual_carbs,
       actualFats: row.actual_fats,
+      targetCalories: row.target_calories,
+      targetProtein: row.target_protein,
+      targetCarbs: row.target_carbs,
+      targetFat: row.target_fats,
       adhered: row.adhered,
       notes: row.notes || ""
     };
   }
+
+  const nutritionEntries = {};
+  for (const row of dataset.nutritionEntries || []) {
+    const date = normalizeDate(row.date);
+    nutritionEntries[date] ||= [];
+    nutritionEntries[date].push({
+      id: row.client_entry_id || row.id,
+      type: row.entry_type,
+      name: row.name,
+      time: row.entry_time || "",
+      protein: Number(row.protein_g || 0),
+      carbs: Number(row.carbs_g || 0),
+      fat: Number(row.fat_g || 0),
+      calorieMode: row.calorie_mode || "auto",
+      manualCalories: row.manual_calories === null ? null : Number(row.manual_calories),
+      notes: row.notes || "",
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      isDeleted: !!row.is_deleted
+    });
+  }
+  const savedMeals = (dataset.savedMeals || []).map((row) => ({
+    id: row.client_meal_id || row.id,
+    type: row.entry_type,
+    name: row.name,
+    protein: Number(row.protein_g || 0),
+    carbs: Number(row.carbs_g || 0),
+    fat: Number(row.fat_g || 0),
+    calorieMode: row.calorie_mode || "auto",
+    manualCalories: row.manual_calories === null ? null : Number(row.manual_calories),
+    notes: row.notes || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    isDeleted: !!row.is_deleted
+  }));
 
   const padelLogs = {};
   for (const row of dataset.padelSessions || []) {
@@ -153,6 +192,8 @@ export function cloudDatasetToSnapshot(dataset, fallback = {}) {
       "mm-daily-logs": dailyLogs,
       "mm-workout-logs": workoutLogsFromRows(dataset.workoutSessions),
       "mm-nutrition-logs": nutritionLogs,
+      "mm-nutrition-entries": typeof dataset.nutritionEntries === "undefined" ? (fallback.data?.["mm-nutrition-entries"] || {}) : nutritionEntries,
+      "mm-saved-meals": typeof dataset.savedMeals === "undefined" ? (fallback.data?.["mm-saved-meals"] || []) : savedMeals,
       "mm-padel-logs": padelLogs,
       "mm-activity-logs": settings.activity_logs || fallback.data?.["mm-activity-logs"] || {},
       "mm-plan": plan,
@@ -343,12 +384,58 @@ export async function syncSnapshotToCloud(athleteId, userId, snapshot) {
     actual_protein: log.actualProtein || null,
     actual_carbs: log.actualCarbs || null,
     actual_fats: log.actualFats || null,
+    target_calories: log.targetCalories || null,
+    target_protein: log.targetProtein || null,
+    target_carbs: log.targetCarbs || null,
+    target_fats: log.targetFat || log.targetFats || null,
     adhered: log.adhered || null,
     notes: log.notes || ""
   }));
   if (nutritionRows.length) {
     const { error } = await supabase.from("nutrition_logs").upsert(nutritionRows, { onConflict: "athlete_id,date" });
     if (error) throw error;
+  }
+
+  const nutritionEntryRows = Object.entries(data["mm-nutrition-entries"] || {}).flatMap(([date, entries]) => (entries || []).map((entry) => ({
+    client_entry_id: entry.id,
+    athlete_id: athleteId,
+    user_id: userId,
+    date,
+    entry_type: entry.type || "meal",
+    name: entry.name || "Nutrition entry",
+    protein_g: Number(entry.protein || 0),
+    carbs_g: Number(entry.carbs || 0),
+    fat_g: Number(entry.fat || 0),
+    calculated_calories: Number(entry.protein || 0) * 4 + Number(entry.carbs || 0) * 4 + Number(entry.fat || 0) * 9,
+    calorie_mode: entry.calorieMode || "auto",
+    manual_calories: entry.calorieMode === "manual" ? Number(entry.manualCalories || 0) : null,
+    entry_time: entry.time || null,
+    notes: entry.notes || "",
+    is_deleted: !!entry.isDeleted
+  })));
+  if (nutritionEntryRows.length) {
+    const { error } = await supabase.from("nutrition_entries").upsert(nutritionEntryRows, { onConflict: "athlete_id,client_entry_id" });
+    if (error && !["42P01", "PGRST205"].includes(error.code)) throw error;
+  }
+
+  const savedMealRows = (data["mm-saved-meals"] || []).map((meal) => ({
+    client_meal_id: meal.id,
+    athlete_id: athleteId,
+    user_id: userId,
+    entry_type: meal.type || "meal",
+    name: meal.name || "Saved meal",
+    protein_g: Number(meal.protein || 0),
+    carbs_g: Number(meal.carbs || 0),
+    fat_g: Number(meal.fat || 0),
+    calculated_calories: Number(meal.protein || 0) * 4 + Number(meal.carbs || 0) * 4 + Number(meal.fat || 0) * 9,
+    calorie_mode: meal.calorieMode || "auto",
+    manual_calories: meal.calorieMode === "manual" ? Number(meal.manualCalories || 0) : null,
+    notes: meal.notes || "",
+    is_deleted: !!meal.isDeleted
+  }));
+  if (savedMealRows.length) {
+    const { error } = await supabase.from("nutrition_saved_meals").upsert(savedMealRows, { onConflict: "athlete_id,client_meal_id" });
+    if (error && !["42P01", "PGRST205"].includes(error.code)) throw error;
   }
 
   const padelRows = mapObjectByDate(data["mm-padel-logs"], (date, log) => ({
