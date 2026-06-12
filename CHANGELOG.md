@@ -326,3 +326,13 @@ Not changed:
 - Bumped static assets and service-worker cache to `v23-release-candidate`.
 - Added final release-candidate, browser, iPhone, security, and PWA/cache reports.
 - No merge, push, deploy, or Documents transfer was performed.
+# June 12, 2026 - Performance Rhythm Motion System (Codex Copy)
+
+- Added `src/motion.js` as the centralized motion controller.
+- Added screen-change gating so full entrances do not replay during workout input rerenders.
+- Added staged Home, Active Workout, Progress, History, Nutrition, Logs, Profile, and Admin reveals.
+- Added bounded progress and chart-draw feedback, set-completion confirmation, toast/sheet transitions, and spring-like navigation state.
+- Added reduced-motion support in JavaScript and CSS.
+- Added `tests/motion.test.mjs` and strengthened V3 UI contracts.
+- Bumped the PWA cache to `mm-fitness-app-v25-performance-rhythm`.
+- No clone, commit, push, migration, or deployment action performed.

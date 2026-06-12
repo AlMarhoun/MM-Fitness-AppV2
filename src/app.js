@@ -13,6 +13,7 @@ import { supabase } from "./supabase.js";
 import { downloadLocalBackup, getSyncStatus, importLocalBackupFile, loadCloudSnapshot, localRead, localRemove, localWrite, queueCloudSnapshot, recordBackupExport, saveCloudSnapshot } from "./storage.js";
 import { clearSessionUi, persistWorkoutUiState, readSessionUi, shouldResumeActiveWorkout } from "./sessionPersistence.js";
 import { savePlanToCloud } from "./sync.js";
+import { applyPerformanceMotion } from "./motion.js?v=25";
 
 const PLAN = {
   title: "MM Hybrid: Fat Loss + Padel Performance + Athletic Physique",
@@ -402,8 +403,9 @@ function render() {
   const restoreActiveScroll = state.screen === "active" && state.activeWorkout;
   const scrollBeforeRender = restoreActiveScroll ? window.scrollY || 0 : null;
   app.dataset.theme = state.theme;
-  app.innerHTML = `${!state.splashDone ? Splash() : ""}<main class="app-main">${route()}</main>${BottomNav()}${Modal()}${state.toast ? `<div class="toast">${state.toast}</div>` : ""}`;
+  app.innerHTML = `${!state.splashDone ? Splash() : ""}<main class="app-main" data-motion-screen="${state.screen}">${route()}</main>${BottomNav()}${Modal()}${state.toast ? `<div class="toast">${state.toast}</div>` : ""}`;
   bind();
+  applyPerformanceMotion({ root: document, screenKey: state.screen });
   if (restoreActiveScroll && pendingScrollY === null) pendingScrollY = scrollBeforeRender;
   restoreScrollAfterRender();
 }
@@ -498,7 +500,7 @@ function Home() {
     ? activities.map((activity) => activity.type === "swimming" ? "Swim" : "Padel").join(" + ")
     : d.hasPadel ? `Padel ${d.padelTime}` : "No extra activity";
   return `${HomeHeader()}
-    <section class="mission-stage">
+    <section class="mission-stage" data-motion-reveal="0">
       <div class="mission-stage-top">
         <div>
           <div class="eyebrow">Today's Mission</div>
@@ -526,24 +528,24 @@ function Home() {
     </section>
 
     <section class="mission-instruments section-gap" aria-label="Daily performance instruments">
-      <article class="instrument-metric nutrition">
+      <article class="instrument-metric nutrition" data-motion-reveal="1">
         <div class="instrument-label">Fuel</div>
         <div class="instrument-value">${d.calories}<small>kcal</small></div>
         <div class="instrument-detail">${nl?.adhered ? "Logged" : `${d.protein}P · ${d.carbs}C`}</div>
       </article>
-      <article class="instrument-metric activity">
+      <article class="instrument-metric activity" data-motion-reveal="2">
         <div class="instrument-label">Activity</div>
         <div class="instrument-value text">${activities.length ? `${activities.length} logged` : d.hasPadel ? "Planned" : "Open"}</div>
         <div class="instrument-detail">${activities.length ? activities.map((activity) => activityLabel(activity.type)).join(" · ") : d.hasPadel ? `Padel ${d.padelTime}` : "Add padel or swim"}</div>
       </article>
-      <article class="instrument-metric body">
+      <article class="instrument-metric body" data-motion-reveal="3">
         <div class="instrument-label">Body</div>
         <div class="instrument-value">${weight ? weight.weight : "—"}<small>kg</small></div>
         <div class="instrument-detail">${weight ? `${(weight.weight - PLAN.startWeight).toFixed(1)} vs start` : "Log weight"}</div>
       </article>
     </section>
 
-    <section class="weekly-instrument section-gap">
+    <section class="weekly-instrument section-gap" data-motion-reveal="4">
       <div class="instrument-section-head">
         <div><div class="eyebrow">Weekly Signal</div><div class="card-title">Consistency</div></div>
         <button class="instrument-link" data-nav="progress">View progress</button>
@@ -569,7 +571,8 @@ function Home() {
     </section>`;
 }
 function ProgressRow(label, value, target, color) {
-  return `<div class="weekly-row"><span>${label}</span><div class="rail"><span style="--pct:${pct(value,target)}%;background:${color}"></span></div><strong>${value}/${target}</strong></div>`;
+  const progress = pct(value, target);
+  return `<div class="weekly-row"><span>${label}</span><div class="rail"><span data-motion-progress="${progress}" style="--pct:${progress}%;background:${color}"></span></div><strong>${value}/${target}</strong></div>`;
 }
 function Quick(label, iconName, done, target, disabled = false) {
   return `<button class="quick-btn ${done ? "done" : ""}" ${disabled ? "disabled" : ""} data-quick="${target}">${icon(iconName)}<span>${label}</span></button>`;
@@ -697,12 +700,12 @@ function ActiveWorkout() {
   const totalSets = d.exercises.reduce((sum, ex) => sum + Number(ex.sets || 0), 0);
   const doneSets = Object.values(aw.sets || {}).filter((s) => s.done).length;
   return `<section class="active-workout-shell">
-    <section class="active-head workout-hud">
+    <section class="active-head workout-hud" data-motion-reveal="0">
       <div class="workout-hud-main">
         <div><div class="eyebrow">Live Session · ${d.day}</div><div class="workout-hud-title">${workoutName(d)}</div></div>
         <div class="workout-time"><div class="timer">${formatElapsed(elapsed(aw))}</div><div class="day-meta">${aw.paused ? "Paused" : "In progress"}</div></div>
       </div>
-      <div class="workout-progress-line"><div class="rail"><span style="--pct:${pct(doneSets,totalSets)}%"></span></div><strong>${doneSets}/${totalSets}</strong></div>
+      <div class="workout-progress-line"><div class="rail"><span data-motion-progress="${pct(doneSets,totalSets)}" style="--pct:${pct(doneSets,totalSets)}%"></span></div><strong>${doneSets}/${totalSets}</strong></div>
       <div class="active-mini-actions">
         ${aw.paused ? `<button class="btn btn-primary" data-action="resume-workout">Resume</button>` : `<button class="btn btn-secondary" data-action="pause-workout">Pause</button>`}
         <button class="btn btn-danger" data-action="cancel-workout">Cancel</button>
@@ -723,7 +726,7 @@ function ActiveExercise(ex, exIdx) {
   const isCurrentExercise = !allDone && state.plan.days[state.activeWorkout.dayIndex].exercises
     .slice(0, exIdx)
     .every((previousExercise, previousIndex) => Array.from({ length: Number(previousExercise.sets) }, (_, i) => state.activeWorkout.sets[`${previousIndex}-${i}`]?.done).every(Boolean));
-  return `<article class="exercise-card active-exercise-card ${allDone ? "exercise-complete" : ""} ${isCurrentExercise ? "current-exercise" : ""}">
+  return `<article class="exercise-card active-exercise-card ${allDone ? "exercise-complete" : ""} ${isCurrentExercise ? "current-exercise" : ""}" data-motion-reveal="${exIdx + 1}">
     <div class="active-exercise-head">
       <div>
         <div class="exercise-order">Exercise ${exIdx + 1}</div>
@@ -764,7 +767,7 @@ function SetRow(exIdx, setIdx, isActive = false) {
     <strong class="set-number">${setIdx + 1}</strong>
     <label class="set-input"><span>Weight</span><input class="input" inputmode="decimal" type="number" placeholder="kg" aria-label="Set ${setIdx + 1} weight" value="${s.weight || ""}" data-set="${key}" data-field="weight" /></label>
     <label class="set-input"><span>Reps</span><input class="input" inputmode="numeric" type="number" placeholder="reps" aria-label="Set ${setIdx + 1} reps" value="${s.reps || ""}" data-set="${key}" data-field="reps" /></label>
-    <button class="check-btn ${s.done ? "done" : ""}" data-set-done="${key}" aria-label="${s.done ? "Mark set incomplete" : "Complete set"}">${s.done ? "✓" : "○"}</button>
+    <button class="check-btn ${s.done ? "done" : ""}" data-set-done="${key}" data-motion-set="${key}" aria-label="${s.done ? "Mark set incomplete" : "Complete set"}">${s.done ? "✓" : "○"}</button>
   </div>`;
 }
 function elapsed(aw) {
@@ -1106,7 +1109,7 @@ function BodySparkline(items) {
   const max = Math.max(...values);
   const range = Math.max(max - min, 1);
   const points = items.map((item, index) => `${8 + (index / Math.max(1, items.length - 1)) * 284},${72 - ((item.value - min) / range) * 52}`).join(" ");
-  return `<svg class="body-sparkline" viewBox="0 0 300 84" role="img" aria-label="Recent body weight trend"><polyline points="${points}"/><circle cx="292" cy="${points.split(" ").at(-1).split(",")[1]}" r="5"/></svg>`;
+  return `<svg class="body-sparkline" viewBox="0 0 300 84" role="img" aria-label="Recent body weight trend"><polyline pathLength="1" points="${points}"/><circle cx="292" cy="${points.split(" ").at(-1).split(",")[1]}" r="5"/></svg>`;
 }
 function RecoveryPatternCard(cockpit) {
   const recovery = cockpit.recovery;
@@ -1204,7 +1207,7 @@ function VolumeLineChart(items) {
       </defs>
       ${[0, .5, 1].map((ratio) => `<line class="chart-grid-line" x1="${plot.left}" x2="${width - plot.right}" y1="${plot.top + usableHeight * ratio}" y2="${plot.top + usableHeight * ratio}" />`).join("")}
       ${area ? `<polygon class="chart-area" points="${area}" />` : ""}
-      ${points.length > 1 ? `<polyline class="chart-line" points="${polyline}" />` : ""}
+      ${points.length > 1 ? `<polyline class="chart-line" pathLength="1" points="${polyline}" />` : ""}
       ${points.map((point, index) => `<g class="chart-point"><circle cx="${point.x}" cy="${point.y}" r="${index === points.length - 1 ? 6 : 4}"/>${index === points.length - 1 ? `<text class="chart-value" x="${point.x}" y="${Math.max(14, point.y - 12)}" text-anchor="middle">${compactKg(point.totalVolume)}</text>` : ""}${index === 0 || index === points.length - 1 || index % labelStep === 0 ? `<text class="chart-label" x="${point.x}" y="${height - 14}" text-anchor="middle">${esc(point.label)}</text>` : ""}<title>${esc(`${point.label}: ${kg(point.totalVolume)} · ${point.title}`)}</title></g>`).join("")}
     </svg>
   </div>`;

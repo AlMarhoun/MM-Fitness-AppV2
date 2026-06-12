@@ -134,3 +134,8 @@ No Supabase, Auth, RLS, storage key, performance formula, workout persistence, o
 ### Cache Version
 
 Static app assets and the service-worker cache were advanced to V22 so installed PWAs receive the elevated workspaces instead of stale V21 UI.
+# Performance Rhythm Motion Layer - June 12, 2026
+
+The approved Performance Rhythm direction is now implemented as a lightweight web motion layer. It borrows Remotion's explicit timing, sequencing, interpolation, and restrained spring principles without adding Remotion's video runtime to the production PWA.
+
+Home now reveals the mission first, then daily instruments and weekly signal. Active Workout keeps the HUD immediate, emphasizes the current exercise, confirms newly completed sets, and preserves the fixed finish dock. Progress and body charts draw once on entry. History, Nutrition, Logs, Profile, and Admin use a common staged hierarchy. Navigation, sheets, and toast feedback share the same motion tokens.

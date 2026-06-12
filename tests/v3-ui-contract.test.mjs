@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const worker = readFileSync(new URL("../sw.js", import.meta.url), "utf8");
 
 const requiredAppContracts = [
   "mission-stage",
@@ -78,5 +80,16 @@ assert.match(app, /data-action="open-recovery"/, "Readiness must open the recove
 assert.doesNotMatch(app, /function readinessScore\(/, "The fabricated default readiness helper must be removed");
 assert.match(app, /avatar-editor-stage/, "Profile upload must open the position and zoom editor");
 assert.match(css, /\.avatar-editor-stage/, "The avatar editor must define a stable crop frame");
+assert.match(app, /applyPerformanceMotion/, "The app must run the centralized motion controller after render");
+assert.match(app, /data-motion-screen=/, "The rendered screen must expose a stable motion key");
+assert.match(app, /data-motion-reveal/, "Major surfaces must expose declarative reveal hooks");
+assert.match(app, /data-motion-progress=/, "Progress indicators must expose bounded motion targets");
+assert.match(css, /--motion-standard:\s*200ms/, "The V3 motion timing must be centralized");
+assert.match(css, /\.motion-screen-enter/, "Screen entrances must be opt-in rather than replaying every render");
+assert.doesNotMatch(css, /\.app-main\s*\{\s*animation:/, "The app shell must not animate on every state render");
+assert.match(index, /styles\.css\?v=25/, "The app shell must request the v25 motion CSS");
+assert.match(index, /app\.js\?v=25/, "The app shell must request the v25 motion JS");
+assert.match(worker, /mm-fitness-app-v25-performance-rhythm/, "The service worker cache must be bumped for motion assets");
+assert.match(worker, /motion\.js\?v=25/, "The service worker must cache the motion controller");
 
 console.log("Performance Instrument V3 UI contracts are present.");

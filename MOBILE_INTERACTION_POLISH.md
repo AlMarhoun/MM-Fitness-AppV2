@@ -46,3 +46,11 @@ The following original action contracts remain unchanged:
 - Cancel with confirmation.
 - Finish with confirmation.
 - Set inputs and completion toggles.
+# Performance Rhythm Motion Pass - June 12, 2026
+
+- Added a centralized motion controller that distinguishes real screen changes from ordinary state rerenders.
+- Added 160-240ms screen, card, navigation, modal, toast, progress, set-completion, and chart feedback.
+- Active Workout inputs remain immediately available; set logging does not replay the full screen entrance.
+- Added a one-shot Mission Stage light sweep and restrained PR/set feedback without looping effects.
+- Added JavaScript and CSS handling for `prefers-reduced-motion`.
+- No timers, storage keys, workout persistence, Supabase, Auth, RLS, or permissions logic changed.

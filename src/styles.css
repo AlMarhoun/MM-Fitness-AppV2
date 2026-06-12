@@ -21,6 +21,14 @@
   --shadow-instrument: 0 12px 34px rgba(0,0,0,.18);
   --shadow-stage: 0 24px 64px rgba(0,0,0,.32);
   --shadow-float: 0 18px 54px rgba(0,0,0,.38);
+  --motion-instant: 90ms;
+  --motion-fast: 160ms;
+  --motion-standard: 200ms;
+  --motion-emphasis: 240ms;
+  --motion-pr: 520ms;
+  --ease-performance: cubic-bezier(.2,.8,.2,1);
+  --ease-settle: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.32,.64,1);
   --bg: #040b14;
   --bg-2: #071321;
   --card: #0b1b2c;
@@ -349,6 +357,12 @@ button { -webkit-tap-highlight-color: transparent; }
   border-radius: inherit;
   background: var(--accent);
 }
+[data-motion-progress] {
+  width: 0;
+  transition: width var(--motion-emphasis) var(--ease-settle);
+}
+[data-motion-progress].motion-progress-ready { width: var(--motion-progress, var(--pct, 0%)); }
+[data-motion-progress].motion-static { transition: none; }
 .weekly-row {
   display: grid;
   grid-template-columns: 86px minmax(0, 1fr) 42px;
@@ -1306,6 +1320,16 @@ textarea { min-height: 86px; resize: vertical; }
   inset: 0 0 auto;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(130,220,255,.68), transparent 72%);
+}
+.mission-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(108deg, transparent 18%, rgba(130,220,255,.11) 43%, transparent 67%);
+  transform: translateX(-115%);
+  opacity: 0;
 }
 .mission-stage-top,
 .mission-actions,
@@ -2307,7 +2331,7 @@ textarea { min-height: 86px; resize: vertical; }
 .admin-workspace-tabs::-webkit-scrollbar { display: none; }
 .admin-workspace-tabs button { flex: 0 0 auto; min-height: 38px; padding: 0 13px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 850; }
 .admin-workspace-tabs button.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); }
-.admin-workspace-panel { min-height: 320px; animation: screenIn 180ms ease-out both; }
+.admin-workspace-panel { min-height: 320px; }
 .admin-user-directory { display: grid; gap: 8px; margin-top: 12px; }
 .admin-user-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; }
 .admin-user-row > div { min-width: 0; }
@@ -2327,25 +2351,63 @@ textarea { min-height: 86px; resize: vertical; }
 .admin-exercise-disclosure .admin-exercise-card { border: 0; border-radius: 0; background: transparent; }
 .admin-exercise-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
-.liquid-bottom-nav { isolation: isolate; transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease; }
+.liquid-bottom-nav { isolation: isolate; transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, background var(--motion-fast) ease; }
 .liquid-bottom-nav::before { content: ""; position: absolute; inset: 5px; z-index: -1; border-radius: 21px; background: linear-gradient(180deg, color-mix(in srgb, white 5%, transparent), transparent); pointer-events: none; }
-.nav-btn { position: relative; transition: color 180ms ease, transform 180ms ease, background 200ms ease, border-color 200ms ease; }
+.nav-btn { position: relative; transition: color var(--motion-fast) ease, transform var(--motion-fast) var(--ease-performance), background var(--motion-standard) ease, border-color var(--motion-standard) ease; }
 .nav-btn:active,
 .btn:active,
 .quick-btn:active,
 .mini-btn:active,
 .icon-action:active { transform: scale(.97); }
-.nav-btn.active { animation: navCapsuleIn 200ms cubic-bezier(.2,.8,.2,1) both; }
-.app-main { animation: screenIn 180ms ease-out both; }
-.motion-backdrop { animation: backdropIn 180ms ease-out both; }
-.motion-sheet { animation: sheetIn 210ms cubic-bezier(.2,.8,.2,1) both; }
+.nav-btn.active { animation: navCapsuleIn var(--motion-standard) var(--ease-spring) both; }
+.motion-screen-enter { animation: screenIn var(--motion-standard) var(--ease-settle) both; }
+[data-motion-reveal] {
+  opacity: 0;
+  transform: translateY(7px);
+  transition:
+    opacity var(--motion-standard) var(--ease-settle) var(--motion-delay, 0ms),
+    transform var(--motion-emphasis) var(--ease-settle) var(--motion-delay, 0ms);
+}
+[data-motion-reveal].motion-reveal-ready {
+  opacity: 1;
+  transform: translateY(0);
+}
+[data-motion-reveal].motion-static { transition: none; }
+.motion-screen-enter .mission-stage::after {
+  animation: missionSweep 620ms var(--ease-performance) 80ms both;
+}
+.motion-screen-enter .mission-primary {
+  animation: actionFocus 360ms var(--ease-settle) 360ms both;
+}
+.active-exercise-card.current-exercise {
+  transition: border-color var(--motion-standard) ease, box-shadow var(--motion-standard) ease, background var(--motion-standard) ease;
+}
+.set-row.active-set { transition: border-color var(--motion-fast) ease, background var(--motion-fast) ease, transform var(--motion-fast) var(--ease-performance); }
+.check-btn.motion-set-complete { animation: setComplete var(--motion-fast) var(--ease-spring) both; }
+.chart-line,
+.body-sparkline polyline {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 460ms var(--ease-settle);
+}
+.chart-line.motion-chart-ready,
+.body-sparkline polyline.motion-chart-ready { stroke-dashoffset: 0; }
+.chart-line.motion-static,
+.body-sparkline polyline.motion-static { transition: none; }
+.motion-backdrop { animation: backdropIn var(--motion-fast) ease-out both; }
+.motion-sheet { animation: sheetIn 210ms var(--ease-settle) both; }
+.toast { animation: toastIn var(--motion-standard) var(--ease-settle) both; }
 .pr-badge,
-.pr-feed-marker { animation: prSignal 520ms ease-out both; }
+.pr-feed-marker { animation: prSignal var(--motion-pr) var(--ease-settle) both; }
 @keyframes screenIn { from { opacity: .78; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes sheetIn { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes navCapsuleIn { from { transform: scale(.95); } to { transform: scale(1); } }
 @keyframes prSignal { 0% { transform: scale(.94); box-shadow: 0 0 0 transparent; } 65% { transform: scale(1.025); box-shadow: 0 0 20px color-mix(in srgb, var(--padel) 25%, transparent); } 100% { transform: scale(1); } }
+@keyframes missionSweep { 0% { opacity: 0; transform: translateX(-115%); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateX(115%); } }
+@keyframes actionFocus { 0%,100% { box-shadow: none; } 55% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent), 0 10px 28px rgba(47,186,245,.16); } }
+@keyframes setComplete { 0% { transform: scale(.92); } 65% { transform: scale(1.045); } 100% { transform: scale(1); } }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 8px) scale(.98); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 
 @media (max-width: 360px) {
   .app-main { padding-left: 12px; padding-right: 12px; }
@@ -2424,4 +2486,11 @@ textarea { min-height: 86px; resize: vertical; }
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
+  [data-motion-reveal],
+  [data-motion-progress] {
+    opacity: 1 !important;
+    transform: none !important;
+    width: var(--motion-progress, var(--pct, auto)) !important;
+  }
+  .mission-stage::after { display: none !important; }
 }

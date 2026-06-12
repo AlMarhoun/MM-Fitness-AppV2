@@ -96,3 +96,6 @@ At every width, document width matched viewport width exactly. No horizontal ove
 - Light theme rendered at 390px without overflow; dark theme remained the primary reviewed direction.
 
 Physical iPhone Add to Home Screen, thumb reach, safe-area, and OLED contrast validation remain pending.
+# Performance Rhythm Responsive Check - June 12, 2026
+
+Motion uses only opacity, transform, stroke offset, and bounded progress width. It does not change the stable dimensions of cards, inputs, charts, calendar cells, the workout finish dock, or bottom navigation. Automated contracts cover the centralized hooks and reduced-motion fallback. Rendered browser verification is recorded with the final task report.

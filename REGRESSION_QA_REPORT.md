@@ -118,3 +118,17 @@ All passed: JavaScript syntax, manifest JSON, PWA redirect safeguards, security/
 | QA Lead | Approved | Profile regression and 320px Plans length were found. | Both were fixed and rerun across requested widths. | Screenshot capture tooling timed out; DOM/layout browser evidence passed. |
 | Red Team Reviewer | Approved | A visually improved Admin could still remain a 7,000px form. | Tabs plus collapsed exercise disclosures reduced initial page length materially. | Plans with unusually large exercise lists will still require scrolling by design. |
 | Technical Writer | Approved | Phase scope and untouched logic needed explicit evidence. | Updated elevation, interaction, responsive, regression, issue, and changelog documents. | Final Phase H remains intentionally unstarted. |
+# Performance Rhythm Regression Pass - June 12, 2026
+
+Passed:
+
+- JavaScript syntax checks, including the new motion controller
+- Manifest and PWA navigation validation
+- Authentication, authorization, athlete isolation, and avatar safeguards
+- V3 UI contracts
+- Progress cockpit and performance-trend calculations
+- Activity logging
+- Readiness and avatar editor tests
+- Motion timing, stagger, progress bounds, screen gating, and reduced-motion tests
+
+No business logic, data schema, storage keys, Supabase calls, Auth, RLS, or role/permission behavior changed.

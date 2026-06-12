@@ -80,3 +80,8 @@ No known syntax-level issues after Phase 1 verification.
 - Live owner/admin/athlete/viewer isolation still requires cross-account Supabase/RLS testing.
 - Admin Plans are significantly shorter with collapsed exercises, but large plans naturally remain scrollable.
 - Browser screenshot capture timed out in the test surface; rendered DOM, interaction, viewport, and overflow checks completed successfully.
+# Performance Rhythm Remaining Validation - June 12, 2026
+
+- Real iPhone Add to Home Screen motion smoothness still requires physical-device validation.
+- `prefers-reduced-motion` is implemented and automated-contract tested; final OS-level visual confirmation should be performed on iPhone.
+- Motion intentionally remains subtle in Admin and destructive confirmations; this is a safety choice, not a missing effect.
