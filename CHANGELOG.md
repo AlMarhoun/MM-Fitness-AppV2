@@ -1,5 +1,16 @@
 # Changelog
 
+## June 12, 2026 - Usefulness, Profile Crop, and Code Polish
+
+- Added profile photo preview, horizontal/vertical drag positioning, 1x-3x zoom, reset, cancel, and final square WebP crop export.
+- Added shared crop geometry tests and optional profile crop metadata migration.
+- Replaced the decorative fallback `80 Ready` with a complete-data Recovery Check model.
+- Made the Home readiness control open the Recovery log directly.
+- Replaced duplicated Recovery content with useful daily Activity context.
+- Reduced duplicate Start Workout messaging and collapsed secondary admin placeholders.
+- Removed confirmed dead JavaScript helpers, handlers, state, and obsolete CSS.
+- Bumped application assets and service-worker cache to version 24.
+
 ## June 12, 2026 - Repository Pre-Push Cleanup
 
 - Removed unreferenced legacy brand mockups and source assets.

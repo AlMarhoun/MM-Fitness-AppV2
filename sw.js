@@ -1,12 +1,14 @@
-const CACHE_NAME = "mm-fitness-app-v23-release-candidate";
+const CACHE_NAME = "mm-fitness-app-v24-usefulness-polish";
 const ASSETS = [
   "./manifest.json",
-  "./src/styles.css?v=23",
-  "./src/app.js?v=23",
+  "./src/styles.css?v=24",
+  "./src/app.js?v=24",
   "./src/activities.js?v=19",
   "./src/history.js?v=19",
   "./src/performance.js?v=18",
   "./src/progressCockpit.js?v=23",
+  "./src/readiness.js?v=24",
+  "./src/avatarEditor.js?v=24",
   "./src/roles.js",
   "./src/permissions.js",
   "./src/profile.js",

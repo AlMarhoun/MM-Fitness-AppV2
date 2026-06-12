@@ -8,7 +8,7 @@
 - The current live account had no recent PR item, so the PR-rich timeline state remains covered by deterministic model tests rather than a live rendered PR record.
 - Legacy workout logs without exercise snapshots continue to use the documented current-plan fallback.
 - Admin actions without deployed secure Edge Functions remain disabled by design.
-- The project folder is not currently a Git working tree, so Phase H did not produce Git status/diff evidence. No merge, push, deploy, or Documents transfer occurred.
+- No commit, push, or deployment was performed during the June 12 polish pass.
 
 ## Pending Device Validation: iOS PWA Redirect Fix
 
@@ -47,14 +47,15 @@ No known syntax-level issues after Phase 1 verification.
 
 ## Phase 4: Auth / Admin Panel
 
-- Admin Panel user management is a safe placeholder, not a live invite system.
-- Real invites, role changes, deactivation, and athlete assignment require Supabase Edge Function or backend.
+- Secure create-user is implemented through the deployed Edge Function structure. Other privileged actions such as role changes and deactivation remain disabled until their dedicated Edge Functions exist.
+- Real invitation email, role changes, deactivation, and expanded assignment operations require their planned Supabase Edge Functions or backend endpoints.
 - Supabase Auth must be configured as invite-only / public signup disabled in the Supabase project.
 - Live RLS testing is still required for owner/admin/athlete/viewer behavior.
 
 ## Profile and Admin Workspace Upgrade
 
-- Private avatar upload is implemented, but camera-library selection and HEIC upload still need physical iPhone validation.
+- Private avatar upload now includes two-axis positioning, zoom, previews, reset, and cropped export. Camera-library selection, touch dragging, HEIC upload, and final framing still need physical iPhone validation.
+- Apply migration `006_profile_avatar_crop.sql` so crop metadata persists alongside the private avatar. The cropped image upload itself has a backward-compatible fallback before the migration is applied.
 - Signed avatar URLs are refreshed when profile/admin data reloads; a continuously open session may need a screen refresh after URL expiry.
 - Remaining privileged actions such as changing roles and deactivation stay disabled until their dedicated secure Edge Functions are deployed.
 - No production deployment was performed as part of this local upgrade.

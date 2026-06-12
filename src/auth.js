@@ -1,6 +1,5 @@
 import { supabase } from "./supabase.js";
 import { getOrCreateAthlete, getProfile, upsertDefaultProfile } from "./db.js";
-import { canOpenAdminPanel } from "./roles.js";
 import { signedAvatarUrl } from "./profile.js";
 
 export const authState = {
@@ -66,8 +65,4 @@ export function currentAthleteId() {
 
 export function currentUserId() {
   return authState.user?.id || null;
-}
-
-export function isAdmin() {
-  return canOpenAdminPanel(authState.profile);
 }

@@ -29,7 +29,7 @@ export async function signedAvatarUrl(path) {
   return data?.signedUrl || "";
 }
 
-export async function uploadOwnAvatar(userId, file, previousPath = "") {
+export async function uploadOwnAvatar(userId, file, previousPath = "", crop = {}) {
   if (!userId) throw new Error("Sign in before uploading a profile picture.");
   if (!file) throw new Error("Choose an image first.");
   if (!ALLOWED_TYPES.has(file.type)) throw new Error("Use a JPG, PNG, WebP, HEIC, or HEIF image.");
@@ -43,10 +43,20 @@ export async function uploadOwnAvatar(userId, file, previousPath = "") {
   });
   if (uploadError) throw uploadError;
 
-  const { error: profileError } = await supabase
+  const cropUpdate = {
+    avatar_path: path,
+    avatar_position_x: Number(crop.x ?? 50),
+    avatar_position_y: Number(crop.y ?? 50),
+    avatar_zoom: Number(crop.zoom ?? 1)
+  };
+  let { error: profileError } = await supabase
     .from("profiles")
-    .update({ avatar_path: path })
+    .update(cropUpdate)
     .eq("id", userId);
+  if (profileError && ["42703", "PGRST204"].includes(profileError.code)) {
+    const fallback = await supabase.from("profiles").update({ avatar_path: path }).eq("id", userId);
+    profileError = fallback.error;
+  }
   if (profileError) {
     await supabase.storage.from(BUCKET).remove([path]);
     throw profileError;
@@ -56,7 +66,7 @@ export async function uploadOwnAvatar(userId, file, previousPath = "") {
     await supabase.storage.from(BUCKET).remove([previousPath]).catch(() => {});
   }
 
-  return { path, url: await signedAvatarUrl(path) };
+  return { path, url: await signedAvatarUrl(path), crop: cropUpdate };
 }
 
 export async function updateOwnProfile(userId, updates) {

@@ -1,9 +1,11 @@
-import { authState, initAuth, isAdmin, signIn, signOut } from "./auth.js";
+import { authState, initAuth, signIn, signOut } from "./auth.js";
 import { loadAdminAthleteSnapshot, loadAdminDirectory, summarizeAthleteSnapshot } from "./adminData.js";
 import { activitiesForDate, activityCount, activityLabel, addActivity, removeActivity } from "./activities.js?v=19";
 import { dayHistory, monthCalendar } from "./history.js?v=19";
 import { aggregateVolumeTrend, createWorkoutSessionSnapshot, summarizeCurrentExercise, summarizeProgress, summarizeWorkoutSession } from "./performance.js?v=18";
 import { buildProgressCockpitModel } from "./progressCockpit.js?v=21";
+import { buildReadinessModel } from "./readiness.js?v=24";
+import { DEFAULT_AVATAR_CROP, avatarDrawGeometry, clampAvatarCrop, loadAvatarImage, renderAvatarCrop } from "./avatarEditor.js?v=24";
 import { ROLE_DEFINITIONS, ROLES, canOpenAdminPanel, isOwnerEmail, roleLabel } from "./roles.js";
 import { PERMISSIONS } from "./permissions.js";
 import { initials, signedAvatarUrl, updateOwnProfile, uploadOwnAvatar } from "./profile.js";
@@ -140,7 +142,6 @@ const state = {
   lastWorkoutSummary: null,
   historySelectedDate: initialSessionUi.historySelectedDate || todayStr(),
   strengthPeriod: read("mm-strength-period", "daily"),
-  adminPanelOpen: false,
   adminSection: "users",
   auth: { ...authState },
   syncStatus: getSyncStatus(),
@@ -155,6 +156,8 @@ const state = {
   adminPlanDay: 0,
   adminPlanStatus: "",
   profileStatus: "",
+  openLogSection: null,
+  avatarEditor: null,
   toast: "",
   modal: null,
   splashDone: resumeActiveWorkout || (!forceSplash && sessionStorage.getItem("mm-splash-done") === "1")
@@ -452,10 +455,6 @@ function LoginScreen() {
       <div class="field"><label>Password</label><input class="input" type="password" autocomplete="current-password" data-auth="password" placeholder="Password" /></div>
       <button class="btn btn-primary section-gap" style="width:100%" data-action="auth-signin">Sign In</button>
     </section>
-    <section class="card metric-card section-gap">
-      <div class="eyebrow">Controlled Access</div>
-      <div class="metric-sub">New users must be invited or created by the owner/admin through a secure backend flow. Public account creation is disabled in this app.</div>
-    </section>
   </section>`;
 }
 function Header(title, eyebrow, right = ProfileAvatarButton()) {
@@ -494,6 +493,7 @@ function Home() {
   const next = getNextAction(d, wl, nl, log);
   const complete = wl?.completed;
   const activities = activitiesForDate(state.activityLogs, today, state.padelLogs);
+  const readiness = buildReadinessModel(log);
   const activityLabel = activities.length
     ? activities.map((activity) => activity.type === "swimming" ? "Swim" : "Padel").join(" + ")
     : d.hasPadel ? `Padel ${d.padelTime}` : "No extra activity";
@@ -504,9 +504,9 @@ function Home() {
           <div class="eyebrow">Today's Mission</div>
           <div class="mission-title">${workoutName(d)}</div>
         </div>
-        <button class="mission-readiness" data-action="theme" aria-label="Readiness ${readinessScore()}. Change theme">
-          <span class="mission-readiness-ring" style="--readiness:${readinessScore()}"><strong>${readinessScore()}</strong></span>
-          <small>Ready</small>
+        <button class="mission-readiness ${readiness.hasScore ? "has-score" : "needs-log"}" data-action="open-recovery" aria-label="${readiness.hasScore ? `${readiness.label} ${readiness.score}, ${readiness.status}` : `Log recovery. Missing ${readiness.missing.join(", ")}`}">
+          <span class="mission-readiness-ring" style="--readiness:${readiness.score || 0}"><strong>${readiness.hasScore ? readiness.score : "+"}</strong></span>
+          <small>${readiness.hasScore ? readiness.status : "Log recovery"}</small>
         </button>
       </div>
       <p class="mission-copy">${d.goal}</p>
@@ -531,10 +531,10 @@ function Home() {
         <div class="instrument-value">${d.calories}<small>kcal</small></div>
         <div class="instrument-detail">${nl?.adhered ? "Logged" : `${d.protein}P · ${d.carbs}C`}</div>
       </article>
-      <article class="instrument-metric recovery">
-        <div class="instrument-label">Recovery</div>
-        <div class="instrument-value text">${recoveryLabel(log)}</div>
-        <div class="instrument-detail">Sleep ${log.sleepScore || "—"} · Energy ${log.energyScore || "—"}</div>
+      <article class="instrument-metric activity">
+        <div class="instrument-label">Activity</div>
+        <div class="instrument-value text">${activities.length ? `${activities.length} logged` : d.hasPadel ? "Planned" : "Open"}</div>
+        <div class="instrument-detail">${activities.length ? activities.map((activity) => activityLabel(activity.type)).join(" · ") : d.hasPadel ? `Padel ${d.padelTime}` : "Add padel or swim"}</div>
       </article>
       <article class="instrument-metric body">
         <div class="instrument-label">Body</div>
@@ -555,11 +555,11 @@ function Home() {
       </div>
     </section>
 
-    <section class="next-action-instrument section-gap home-tail">
-      <div class="instrument-section-head">
+    <section class="next-action-instrument section-gap home-tail ${next.action === "start-today" ? "quick-only" : ""}">
+      ${next.action === "start-today" ? "" : `<div class="instrument-section-head">
         <div><div class="eyebrow">Next Best Action</div><div class="card-title">${next.label}</div></div>
         <button class="btn btn-secondary next-action-btn" data-action="${next.action}">Open</button>
-      </div>
+      </div>`}
       <div class="quick-grid">
         ${Quick("Log Weight", "weight", !!log.bodyWeight, "logs")}
         ${Quick("Nutrition", "nutrition", !!nl?.adhered, "nutrition")}
@@ -567,17 +567,6 @@ function Home() {
         ${Quick("Activity", "play", activities.length > 0, "activity")}
       </div>
     </section>`;
-}
-function readinessScore() {
-  const log = state.logs[todayStr()] || {};
-  const scores = [log.energyScore || 4, log.sleepScore || 4, log.sorenessScore ? 6 - log.sorenessScore : 4, log.achillesScore ? 6 - log.achillesScore : 4];
-  return Math.round(scores.reduce((a, b) => a + b, 0) / 20 * 100);
-}
-function recoveryLabel(log) {
-  const avg = ((log.energyScore || 4) + (log.sleepScore || 4) + (log.sorenessScore ? 6 - log.sorenessScore : 4)) / 3;
-  if (avg >= 4.3) return "Great";
-  if (avg >= 3.3) return "Good";
-  return "Watch";
 }
 function ProgressRow(label, value, target, color) {
   return `<div class="weekly-row"><span>${label}</span><div class="rail"><span style="--pct:${pct(value,target)}%;background:${color}"></span></div><strong>${value}/${target}</strong></div>`;
@@ -814,8 +803,8 @@ function Logs() {
     ${HistoryCalendar()}
     ${DailyActivities(state.historySelectedDate)}
     <section class="log-sections section-gap">
-      <details class="log-section" open><summary><span><b>Body</b><small>Weight and waist</small></span><em>${log.bodyWeight || log.waist ? "Logged" : "Add"}</em></summary><div class="log-section-body">${Field("Weight (kg)", "bodyWeight", log.bodyWeight || "", "number", "e.g. 99.1")}${Field("Waist (cm)", "waist", log.waist || "", "number", "optional")}</div></details>
-      <details class="log-section"><summary><span><b>Recovery</b><small>Energy, sleep and soreness</small></span><em>${log.energyScore || log.sleepScore ? "Partial" : "Add"}</em></summary><div class="log-section-body">${Score("Energy", "energyScore", log.energyScore)}${Score("Soreness", "sorenessScore", log.sorenessScore)}${Score("Sleep", "sleepScore", log.sleepScore)}${Score("Achilles", "achillesScore", log.achillesScore)}</div></details>
+      <details class="log-section" ${!state.openLogSection || state.openLogSection === "body" ? "open" : ""}><summary><span><b>Body</b><small>Weight and waist</small></span><em>${log.bodyWeight || log.waist ? "Logged" : "Add"}</em></summary><div class="log-section-body">${Field("Weight (kg)", "bodyWeight", log.bodyWeight || "", "number", "e.g. 99.1")}${Field("Waist (cm)", "waist", log.waist || "", "number", "optional")}</div></details>
+      <details class="log-section" ${state.openLogSection === "recovery" ? "open" : ""}><summary><span><b>Recovery</b><small>Energy, sleep, soreness and Achilles</small></span><em>${buildReadinessModel(log).hasScore ? "Complete" : log.energyScore || log.sleepScore || log.sorenessScore || log.achillesScore ? "Partial" : "Add"}</em></summary><div class="log-section-body"><div class="recovery-explainer">Complete all four inputs to unlock Today's Readiness on Home.</div>${Score("Energy", "energyScore", log.energyScore)}${Score("Soreness", "sorenessScore", log.sorenessScore)}${Score("Sleep", "sleepScore", log.sleepScore)}${Score("Achilles", "achillesScore", log.achillesScore)}</div></details>
       <details class="log-section"><summary><span><b>Nutrition</b><small>Daily adherence</small></span><em>${log.dietAdherence ? esc(log.dietAdherence) : "Add"}</em></summary><div class="log-section-body">${Adherence("dietAdherence", log.dietAdherence)}</div></details>
       <details class="log-section"><summary><span><b>Notes</b><small>Context for today</small></span><em>${log.notes ? "Added" : "Add"}</em></summary><div class="log-section-body"><div class="field"><label>Daily Notes</label><textarea data-log="notes" placeholder="How did today go?">${log.notes || ""}</textarea></div></div></details>
     </section>`;
@@ -1160,7 +1149,7 @@ function ProfileScreen() {
     </section>
     <section class="form-card section-gap profile-settings-card">
       <div><div class="eyebrow">Identity</div><div class="card-title">Personal Profile</div></div>
-      <div class="field"><label>Profile Picture</label><input class="input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" data-profile-avatar /></div>
+      <div class="profile-photo-control"><div><label>Profile Picture</label><p>Choose, position, and preview the crop before it is uploaded.</p></div><label class="btn btn-secondary profile-photo-picker">Choose Photo<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" data-profile-avatar /></label></div>
       <div class="field"><label>Display Name</label><input class="input" data-profile-field="display_name" value="${esc(profile.display_name || "")}" /></div>
       <div class="field"><label>Bio</label><textarea data-profile-field="bio" placeholder="Training focus, goals, or coaching notes">${esc(profile.bio || "")}</textarea></div>
       <button class="btn btn-primary section-gap" style="width:100%" data-action="save-profile">Save Profile</button>
@@ -1191,23 +1180,6 @@ function AdminScreen() {
       <span class="admin-status">Private</span>
     </section>
     ${AdminPanel()}`;
-}
-function TrendBars(items, mode) {
-  const values = items.map((item) => Number(item.value || 0)).filter(Number.isFinite);
-  const max = Math.max(...values, 1);
-  const min = mode === "weight" ? Math.min(...values) : 0;
-  const range = Math.max(max - min, mode === "weight" ? 1 : max);
-  return `<div class="trend-chart ${items.length === 1 ? "single" : ""}" style="--trend-count:${Math.max(2, Math.min(8, items.length))}">
-    ${items.map((item) => {
-      const normalized = mode === "weight" ? (item.value - min) / range : item.value / max;
-      const height = Math.round(22 + Math.max(0, Math.min(1, normalized)) * 66);
-      return `<div class="trend-column" title="${esc(item.title || item.label)}">
-        <div class="trend-value">${mode === "weight" ? Number(item.value).toFixed(1) : Math.round(item.value).toLocaleString("en-US")}</div>
-        <div class="trend-track"><span style="--trend-height:${height}%"></span></div>
-        <div class="trend-label">${esc(item.label)}</div>
-      </div>`;
-    }).join("")}
-  </div>`;
 }
 function VolumeLineChart(items) {
   const width = 640;
@@ -1277,15 +1249,18 @@ function AdminWorkspaceSection(section, currentEmail, role) {
         </div>
         <span class="chip warning">Protected actions</span>
       </div>
-      <div class="admin-action-grid premium">
+      <details class="protected-actions-disclosure">
+        <summary><span>Protected admin actions</span><em>Requires secure server functions</em></summary>
+        <div class="admin-action-grid premium">
         ${AdminAction("Invite user", "Send a secure invite and choose initial role.", "invite-user")}
         ${AdminAction("Change role", "Move a user between admin, athlete, and viewer.", "change-user-role")}
         ${AdminAction("Grant permission", "Allow specific actions without changing role.", "update-user-permissions")}
         ${AdminAction("Assign athlete", "Connect a user to Mohammad or future athlete profiles.", "assign-athlete")}
         ${AdminAction("Deactivate", "Disable access without deleting historical data.", "deactivate-user")}
         ${AdminAction("Audit logs", "Review sensitive admin activity.", "audit_logs.view")}
-      </div>
-      <div class="admin-note">Add User is live above through the create-user Edge Function. These remaining controls stay locked until their own Edge Functions are deployed.</div>
+        </div>
+        <div class="admin-note">Add User is live through the create-user Edge Function. These remaining controls stay locked until their own Edge Functions are deployed.</div>
+      </details>
       <div class="admin-section-head section-gap"><div><div class="eyebrow">Roles</div><div class="card-title">Default Authority Levels</div></div></div>
       <div class="role-stack">
         ${Object.entries(ROLE_DEFINITIONS).map(([key, description]) => `<div class="role-row"><span>${roleLabel(key)}</span><strong>${esc(description)}</strong></div>`).join("")}
@@ -1507,13 +1482,13 @@ function Modal() {
   if (!state.modal) return "";
   const m = state.modal;
   return `<div class="modal-backdrop motion-backdrop" role="dialog" aria-modal="true">
-    <div class="modal motion-sheet">
+    <div class="modal motion-sheet ${m.className || ""}">
       <div class="card-title">${m.title}</div>
       ${m.bodyHtml || `<p class="day-meta" style="margin:8px 0 0">${m.body}</p>`}
-      <div class="modal-actions">
+      ${m.hideActions ? "" : `<div class="modal-actions">
         <button class="btn btn-secondary" data-modal="${m.cancelAction}">${m.cancelLabel}</button>
         <button class="btn ${m.danger ? "btn-danger" : "btn-primary"}" data-modal="${m.confirmAction}">${m.confirmLabel}</button>
-      </div>
+      </div>`}
     </div>
   </div>`;
 }
@@ -1549,6 +1524,91 @@ function toTimeInput(value = "") {
   if (period === "PM" && hour < 12) hour += 12;
   if (period === "AM" && hour === 12) hour = 0;
   return `${String(hour).padStart(2, "0")}:${minute}`;
+}
+function avatarEditorBody(editor) {
+  return `<div class="avatar-editor">
+    <div class="avatar-editor-stage" data-avatar-drag-stage>
+      <img src="${esc(editor.url)}" alt="Profile photo crop preview" data-avatar-crop-image />
+      <span>Drag to reposition</span>
+    </div>
+    <div class="avatar-zoom-control">
+      <div><strong>Zoom</strong><output data-avatar-zoom-output>${editor.crop.zoom.toFixed(2)}×</output></div>
+      <input type="range" min="1" max="3" step="0.01" value="${editor.crop.zoom}" data-avatar-zoom aria-label="Profile photo zoom" />
+    </div>
+    <div class="avatar-preview-row" aria-label="Profile photo size previews">
+      ${["profile", "header", "list"].map((label) => `<div><span class="avatar-preview ${label}"><img src="${esc(editor.url)}" alt="" data-avatar-crop-image /></span><small>${label}</small></div>`).join("")}
+    </div>
+    <div class="avatar-editor-actions">
+      <button class="btn btn-secondary" data-modal="avatar-reset">Reset</button>
+      <button class="btn btn-secondary" data-modal="avatar-cancel">Cancel</button>
+      <button class="btn btn-primary" data-modal="avatar-save">Save Photo</button>
+    </div>
+  </div>`;
+}
+async function openAvatarEditor(file) {
+  state.profileStatus = "Preparing photo preview...";
+  render();
+  try {
+    const loaded = await loadAvatarImage(file);
+    state.avatarEditor = { file, image: loaded.image, url: loaded.url, crop: { ...DEFAULT_AVATAR_CROP } };
+    state.profileStatus = "";
+    state.modal = {
+      title: "Position Profile Photo",
+      bodyHtml: avatarEditorBody(state.avatarEditor),
+      className: "avatar-editor-modal",
+      hideActions: true
+    };
+  } catch (error) {
+    state.avatarEditor = null;
+    state.profileStatus = error.message || "Could not preview this image.";
+  }
+  render();
+}
+function syncAvatarCropPreview() {
+  if (!state.avatarEditor) return;
+  state.avatarEditor.crop = clampAvatarCrop(state.avatarEditor.crop);
+  document.querySelectorAll("[data-avatar-crop-image]").forEach((image) => {
+    const frame = image.parentElement;
+    const size = frame?.clientWidth || 0;
+    if (!size) return;
+    const geometry = avatarDrawGeometry({ width: state.avatarEditor.image.naturalWidth, height: state.avatarEditor.image.naturalHeight }, size, state.avatarEditor.crop);
+    image.style.width = `${geometry.drawWidth}px`;
+    image.style.height = `${geometry.drawHeight}px`;
+    image.style.left = `${geometry.dx}px`;
+    image.style.top = `${geometry.dy}px`;
+  });
+  const output = document.querySelector("[data-avatar-zoom-output]");
+  if (output) output.textContent = `${state.avatarEditor.crop.zoom.toFixed(2)}×`;
+}
+function closeAvatarEditor() {
+  if (state.avatarEditor?.url) URL.revokeObjectURL(state.avatarEditor.url);
+  state.avatarEditor = null;
+  state.modal = null;
+}
+async function saveAvatarEditor() {
+  const editor = state.avatarEditor;
+  if (!editor) return;
+  state.profileStatus = "Cropping and uploading profile photo...";
+  state.modal = null;
+  render();
+  try {
+    const croppedFile = await renderAvatarCrop(editor.image, editor.crop);
+    const uploaded = await uploadOwnAvatar(currentUserId(), croppedFile, state.auth.profile?.avatar_path || "", editor.crop);
+    state.auth.profile = {
+      ...state.auth.profile,
+      avatar_path: uploaded.path,
+      avatar_url: uploaded.url,
+      avatar_position_x: uploaded.crop.avatar_position_x,
+      avatar_position_y: uploaded.crop.avatar_position_y,
+      avatar_zoom: uploaded.crop.avatar_zoom
+    };
+    state.profileStatus = "Profile photo saved.";
+  } catch (error) {
+    state.profileStatus = error.message || "Could not save the profile photo.";
+  }
+  if (editor.url) URL.revokeObjectURL(editor.url);
+  state.avatarEditor = null;
+  render();
 }
 function confirmCancel() {
   state.modal = {
@@ -1721,17 +1781,36 @@ function bind() {
   document.querySelectorAll("[data-profile-avatar]").forEach((el) => el.addEventListener("change", async () => {
     const file = el.files?.[0];
     if (!file) return;
-    state.profileStatus = "Uploading profile picture...";
-    render();
-    try {
-      const uploaded = await uploadOwnAvatar(currentUserId(), file, state.auth.profile?.avatar_path || "");
-      state.auth.profile = { ...state.auth.profile, avatar_path: uploaded.path, avatar_url: uploaded.url };
-      state.profileStatus = "Profile picture updated.";
-    } catch (error) {
-      state.profileStatus = error.message || "Could not upload profile picture.";
-    }
-    render();
+    await openAvatarEditor(file);
   }));
+  document.querySelectorAll("[data-avatar-zoom]").forEach((el) => el.addEventListener("input", () => {
+    if (!state.avatarEditor) return;
+    state.avatarEditor.crop.zoom = Number(el.value);
+    syncAvatarCropPreview();
+  }));
+  document.querySelectorAll("[data-avatar-drag-stage]").forEach((stage) => {
+    let drag = null;
+    stage.addEventListener("pointerdown", (event) => {
+      if (!state.avatarEditor) return;
+      drag = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, crop: { ...state.avatarEditor.crop } };
+      stage.setPointerCapture(event.pointerId);
+      stage.classList.add("dragging");
+    });
+    stage.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId || !state.avatarEditor) return;
+      const rect = stage.getBoundingClientRect();
+      state.avatarEditor.crop.x = drag.crop.x - (event.clientX - drag.clientX) / rect.width * 100 / state.avatarEditor.crop.zoom;
+      state.avatarEditor.crop.y = drag.crop.y - (event.clientY - drag.clientY) / rect.height * 100 / state.avatarEditor.crop.zoom;
+      syncAvatarCropPreview();
+    });
+    const endDrag = (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      drag = null;
+      stage.classList.remove("dragging");
+    };
+    stage.addEventListener("pointerup", endDrag);
+    stage.addEventListener("pointercancel", endDrag);
+  });
   document.querySelectorAll("[data-admin-plan-day]").forEach((el) => el.addEventListener("click", () => {
     state.adminPlanDay = Number(el.dataset.adminPlanDay);
     render();
@@ -1790,6 +1869,7 @@ function bind() {
     render();
   }));
   document.querySelectorAll("[data-modal]").forEach((el) => el.addEventListener("click", () => handleModal(el.dataset.modal)));
+  if (state.avatarEditor) requestAnimationFrame(syncAvatarCropPreview);
   manageTimer();
 }
 async function handleAction(action) {
@@ -1810,15 +1890,6 @@ async function handleAction(action) {
       render();
     }
   }
-  if (action === "toggle-admin-panel") {
-    if (!canOpenAdminPanel(state.auth.profile)) return toast("Admin access required");
-    state.adminPanelOpen = !state.adminPanelOpen;
-    if (state.adminPanelOpen && !state.adminAthletes.length) {
-      await loadAdminCommandCenter();
-      return;
-    }
-    render();
-  }
   if (action === "open-admin-workspace") {
     if (!canOpenAdminPanel(state.auth.profile)) return toast("Admin access required");
     state.screen = "admin";
@@ -1830,6 +1901,10 @@ async function handleAction(action) {
   }
   if (action === "profile-back") {
     setScreen("home");
+  }
+  if (action === "open-recovery") {
+    state.openLogSection = "recovery";
+    setScreen("logs");
   }
   if (action === "save-profile") {
     const displayName = document.querySelector("[data-profile-field='display_name']")?.value || "";
@@ -1967,11 +2042,24 @@ function togglePadel() {
   const d = todayPlan();
   openActivityModal(today, "padel");
 }
-function handleModal(action) {
+async function handleModal(action) {
   if (action === "close") {
     state.modal = null;
     state.lastWorkoutSummary = null;
     render();
+  }
+  if (action === "avatar-reset") {
+    if (!state.avatarEditor) return;
+    state.avatarEditor.crop = { ...DEFAULT_AVATAR_CROP };
+    state.modal.bodyHtml = avatarEditorBody(state.avatarEditor);
+    render();
+  }
+  if (action === "avatar-cancel") {
+    closeAvatarEditor();
+    render();
+  }
+  if (action === "avatar-save") {
+    await saveAvatarEditor();
   }
   if (action === "confirm-cancel") {
     state.activeWorkout = null;

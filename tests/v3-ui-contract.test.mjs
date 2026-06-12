@@ -73,5 +73,10 @@ assert.match(app, /data-action="admin-create-user"/, "Admin Workspace must prese
 assert.doesNotMatch(app, /signUp\(/, "Public signup must remain absent from the UI implementation");
 assert.ok(app.includes("Object.values(state.workoutLogs"), "Profile metrics must support the keyed workout-log storage model");
 assert.match(css, /\.admin-user-row\s*\{\s*display:\s*grid;/, "Admin user rows must use a shrink-safe grid at 320px");
+assert.match(app, /buildReadinessModel/, "Home readiness must come from the tested presentation model");
+assert.match(app, /data-action="open-recovery"/, "Readiness must open the recovery log instead of changing theme");
+assert.doesNotMatch(app, /function readinessScore\(/, "The fabricated default readiness helper must be removed");
+assert.match(app, /avatar-editor-stage/, "Profile upload must open the position and zoom editor");
+assert.match(css, /\.avatar-editor-stage/, "The avatar editor must define a stable crop frame");
 
 console.log("Performance Instrument V3 UI contracts are present.");
